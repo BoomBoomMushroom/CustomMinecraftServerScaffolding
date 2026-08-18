@@ -92,6 +92,10 @@ def readIdentifier(data: bytes) -> tuple[str, int]:
 
     return (identifier, bytesRead)
 
+def writeIdentifier(identifier: str) -> bytes:
+    b: bytes = writeString(identifier)
+    readIdentifier(b) # if it is an invalid identifier it will raise an exception in here
+    return b
 
 
 

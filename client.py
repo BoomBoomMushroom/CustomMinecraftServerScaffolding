@@ -1,10 +1,18 @@
 import packets
 import dataTypes
+from ServerSettings import ServerSettings
+
+import os
+import json
+import io
+import nbtlib
 
 class Client:
     def __init__(self):
         self.username = ""
         self.UUID = ""
+
+        self.registries = []
 
         self.state: packets.ConnectionState = "HANDSHAKING"
         self.data: bytes = bytes()
@@ -47,6 +55,56 @@ class Client:
         self.handlePackets()
 
     def generateAndSendRegistryData(self):
-        
-        pass
+        """
+        queuedRegisters = [
+            "banner_pattern", "damage_type", "dimension_type", "instrument", "jukebox_song", "painting_variant",
+            "sulfur_cube_archetype", "trim_material", "worldgen/biome", "cat_variant", "cat_sound_variant",
+            "chicken_variant", "chicken_sound_variant", "cow_variant", "cow_sound_variant", "frog_variant",
+            "pig_variant", "pig_sound_variant", "wolf_variant", "wolf_sound_variant", "zombie_nautilus_variant",
+        ]
+        """
+        queuedRegisters = ["dimension_type", "timeline"]
+
+        for register in queuedRegisters:
+            path = f"./registries/26.2/minecraft/{register}"
+            files = [f for f in os.listdir(path) if os.path.isfile(os.path.join(path, f))]
+
+            packetData = bytes()
+            packetData += dataTypes.writeIdentifier(f"minecraft:{register}")
+            packetData += dataTypes.writeVarInt(len(files))
+
+            for file in files:
+                fileData = "{}"
+                with open(f"{path}/{file}") as f: fileData = f.read()
+
+                nbtBytesIO = io.BytesIO()
+                nbt = nbtlib.parse_nbt(fileData)
+                nbtlib.File(nbt).write(nbtBytesIO)
+                nbtBytes: bytes = nbtBytesIO.getvalue()
+                if ServerSettings.protocol >= 764:
+                    # remove bytes at indexes 1 and 2 since after 1.20.2 compound tags dont send their name when using networks for SOME reason
+                    nbtBytes = bytes([nbtBytes[0]]) + nbtBytes[3:]
+                
+                nameNoExtention = ".".join( file.split(".")[:-1] )
+                packetData += dataTypes.writeIdentifier(f"minecraft:{nameNoExtention}")
+                packetData += dataTypes.writeBoolean(True)
+                packetData += nbtBytes
+
+                self.registries.append(f"minecraft:{nameNoExtention}") # make sure we don't lose track of it!
+
+            registryPacket = packets.RegistryData_ClientBound(packetData)
+            self.queuedOutboundPackets.append( registryPacket )
+
+        queuedTags = ["timeline"]
+        print(self.registries)
+        raise Exception("")
+
+        updateTagsPacketData = bytes()
+        updateTagsPacket = packets.UpdateTags_ClientBound(updateTagsPacketData)
+
+        self.queuedOutboundPackets.append(updateTagsPacket)
+
+
+        finishConfigPacket = packets.FinishConfiguration_ClientBound()
+        self.queuedOutboundPackets.append(finishConfigPacket)
 

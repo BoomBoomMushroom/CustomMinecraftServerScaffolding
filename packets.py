@@ -1,4 +1,5 @@
 import dataTypes
+from ServerSettings import ServerSettings
 
 from typing import Literal
 import time
@@ -67,18 +68,18 @@ class StatusResponse_ServerBound(Packet):
     def handle(self):
         responseJson = {
             "version": {
-                "name": "26.2",
-                "protocol": 776
+                "name": ServerSettings.version,
+                "protocol": ServerSettings.protocol
             },
             "player": {
-                "max": 20,
-                "online": 0,
+                "max": ServerSettings.maxPlayers,
+                "online": ServerSettings.playersOnline,
                 "sample": []
             },
             "description": {
-                "text": "MOTD from Server, to modify it: change `.handle()` in `StatusResponse_ServerBound` class"
+                "text": ServerSettings.motd
             },
-            "favicon": "data:image/png;base64,<data>",
+            "favicon": ServerSettings.serverIcon,
             "enforcesSecureChat": False
         }
         jsonBytes = dataTypes.writeString(json.dumps(responseJson))
@@ -188,6 +189,14 @@ class RegistryData_ClientBound(Packet):
     def __init__(self, data = bytearray(0)):
         super().__init__(0x7, "registry_data", data, "ClientBound", "CONFIGURATION")
 
+class FinishConfiguration_ClientBound(Packet):
+    def __init__(self, data = bytearray(0)):
+        super().__init__(0x3, "finish_configuration", data, "ClientBound", "CONFIGURATION")
+
+class UpdateTags_ClientBound(Packet):
+    def __init__(self, data = bytearray(0)):
+        super().__init__(0xD, "update_tags", data, "ClientBound", "CONFIGURATION")
+
 # Play packets
 
 
@@ -221,6 +230,8 @@ LOGIN_PACKETS = [
 CONFIGURATION_PACKETS = [
     ClientInformation_ServerBound,
     RegistryData_ClientBound,
+    FinishConfiguration_ClientBound,
+    UpdateTags_ClientBound
 ]
 PLAY_PACKETS = []
 
