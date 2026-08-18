@@ -1,0 +1,100 @@
+import struct
+import re
+# For format strings for (un)packing check here: https://docs.python.org/3/library/struct.html#struct-format-strings
+
+class BytesReader:
+    def __init__(self, data: bytes, startPos: int=0):
+        self.data = data
+        self.bytesRead = startPos
+
+    def readByte(self, incrementPointer: bool=True):
+        b = self.data[self.bytesRead]
+        if incrementPointer: self.bytesRead += 1
+        return b
+
+    def setPointer(self, newPointer: int): self.bytesRead = newPointer
+    def incrementPointer(self, increment: int): self.bytesRead += increment
+
+class BytesWriter:
+    def __init__(self, data: bytes = bytes()):
+        self.data: bytes = data
+    
+    def appendBytes(self, newBytes: bytes):
+        self.data += newBytes
+
+    def appendInt(self, v: int):
+        self.data += bytes([v])
+
+# Var Ints
+def readVarInt(data: bytes) -> tuple[int, int]: # value, bytesRead
+    reader = BytesReader(data)
+    value = 0
+
+    for position in range(0, 32, 7):
+        currentByte = reader.readByte()
+        value |= (currentByte & 0x7F) << position
+        if (currentByte & 0x80) == 0: return (value, reader.bytesRead)
+
+    raise Exception("Varint too big")
+
+def writeVarInt(value: int):
+    writer = BytesWriter()
+    while (value & ~0x7F) != 0:
+        writer.appendInt( (value & 0x7F) | 0x80 )
+
+        value >>= 7
+    
+    writer.appendInt(value & 0xFF)
+    return writer.data
+
+
+# strings
+def readString(data: bytes) -> tuple[str, int]:
+    length, bytesReadForLength = readVarInt(data)
+    stringData: bytes = data[bytesReadForLength:bytesReadForLength+length]
+    stringData = stringData.decode("utf-8")
+
+    return (stringData, length + bytesReadForLength)
+
+def writeString(toWrite: str) -> bytes:
+    length = len(toWrite)
+    lenBytes: bytes = writeVarInt(length)
+    # I actually dont care if it is more or not
+    #if len(lenBytes) > 3: raise Exception("Length of stringLength varint cannot be more than 3 bytes!")
+    return lenBytes + toWrite.encode("utf-8")
+
+
+# shorts
+def readUnsignedShort(data: bytes) -> tuple[int, int]:
+    val = struct.unpack('H', data[0:2])
+    return (val, 2)
+
+# longs
+def writeSignedLong(value: int) -> bytes:
+    return struct.pack("l", value)
+
+# booleans
+def writeBoolean(value: bool) -> bytes:
+    if value == True: return bytes([0x01])
+    else: return bytes([0x00])
+
+# identifiers
+def readIdentifier(data: bytes) -> tuple[str, int]:
+    identifier, bytesRead = readString(data)
+    namespace, value = identifier.split(":")
+
+    namespaceMatch = re.fullmatch("[a-z0-9._-]+", namespace)
+    valueMatch = re.fullmatch("[a-z0-9._/-]+", value)
+
+    if namespaceMatch == None or valueMatch == None:
+        raise Exception("Invalid Identifier!! " + identifier)
+
+
+    return (identifier, bytesRead)
+
+
+
+
+if __name__ == "__main__":
+    pass
+
