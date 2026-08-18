@@ -1,0 +1,3 @@
+Read "Obtaining vanilla registry data" @ https://minecraft.wiki/w/Java_Edition_protocol/Registries#List_of_synchronized_registries
+
+Download client.jar or server.jar and the data/ folder is what we want, rename it to the version you want and then put it in the registries folder
