@@ -12,19 +12,31 @@ class Client:
     def __init__(self):
         self.username = ""
         self.UUID = ""
+        self.posX: float = 0
+        self.posY: float = 0
+        self.posZ: float = 0
+        self.velX: float = 0
+        self.velY: float = 0
+        self.velZ: float = 0
+        self.yaw: float = 0
+        self.pitch: float = 0
+        self.onGround = False
+
+        # Special numbers that can tick up, keep track of these
         self.playerEntityId: int = dataTypes.readInt(random.randbytes(4))[0] # ramdom 4 byte EID
+        self.teleportId: int = random.randint(1, 999)
 
         self.registries: dict[str, list[int]] = {}
 
         self.state: packets.ConnectionState = "HANDSHAKING"
-        self.data: bytes = bytes()
+        self.socketData: bytes = bytes()
         self.unhandledPackets: list[packets.Packet] = []
         self.queuedOutboundPackets: list[packets.Packet] = []
 
     def readAllPackets(self):
         while True:
             # typing is given by the return typing of decodePacket (a tuple[bytes, Packet])
-            self.data, packet = packets.decodePacket(self.data, self.state)
+            self.socketData, packet = packets.decodePacket(self.socketData, self.state)
             if packet == None: break
             self.unhandledPackets.append(packet)
 
@@ -38,11 +50,21 @@ class Client:
         # update the client's data
         if packetResponse.updateUsername != None: self.username = packetResponse.updateUsername
         if packetResponse.updateUUID != None: self.UUID = packetResponse.updateUUID
+        if packetResponse.updatePosition != None: self.posX, self.posY, self.posZ = packetResponse.updatePosition
+        if packetResponse.updateRoation != None: self.yaw, self.pitch = packetResponse.updateRoation
+        if packetResponse.updateOnGround != None: self.onGround = packetResponse.updateOnGround
+        if packetResponse.updateAgainstWall != None: pass # dont care abt it rn
 
         # client todo stuff
         if packetResponse.generateAndSendRegistryData == True: self.generateAndSendRegistryData()
         if packetResponse.giveLoginPacket == True: self.generateAndSendLoginPacket()
         if packetResponse.stuffAfterLoginPacket == True: self.generateAndSendStuffAfterLoginPacket()
+
+        # info from packets to know stuff happened
+        if packetResponse.teleportId != None:
+            if packetResponse.teleportId == self.teleportId:
+                print(f"~~~ Teleport (id: {packetResponse.teleportId}) was successful")
+
         
 
     def handlePackets(self):
@@ -51,11 +73,16 @@ class Client:
         while len(self.unhandledPackets) > 0:
             packet = self.unhandledPackets.pop(0) # pop the first one for a FIFO queue
             print(packet)
-            response = packet.handle()
-            self.handlePacketReturn(response)
+            try:
+                response = packet.handle()
+                self.handlePacketReturn(response)
+            except Exception as e:
+                #raise e
+                self.queuedOutboundPackets = None # the thread will see this is None and end the connection
+                pass
 
     def readInBytes(self, newData: bytes):
-        self.data += newData
+        self.socketData += newData
         self.handlePackets()
 
     def generateAndSendRegistryData(self):
@@ -273,12 +300,56 @@ class Client:
 
     def generateAndSendStuffAfterLoginPacket(self):
         # change difficulty packet
+        
         # player abilities packet
+        
         # set held item packet
+        
         # update recipes packet
+        
         # entity event packet | for the OP permission level
+        
         # commands packet
+        
         # update recipe book packet
+        
         # syncronize player position packet
+        ppcbData: bytes = bytes()
+        self.teleportId += 1
+        ppcbData += dataTypes.writeVarInt(self.teleportId) # teleport id, will be used to confirm in confirm teleport packet
+        ppcbData += dataTypes.writeDouble(self.posX) # X
+        ppcbData += dataTypes.writeDouble(self.posY) # Y
+        ppcbData += dataTypes.writeDouble(self.posZ) # Z
+        ppcbData += dataTypes.writeDouble(self.velX) # Vx
+        ppcbData += dataTypes.writeDouble(self.velY) # Vy
+        ppcbData += dataTypes.writeDouble(self.velZ) # Vz
+        ppcbData += dataTypes.writeFloat(self.yaw) # yaw, in degrees
+        ppcbData += dataTypes.writeFloat(self.pitch) # pitch, in degrees
+        ppcbData += dataTypes.writeInt(0) # teleport flags (https://minecraft.wiki/w/Java_Edition_protocol/Packets#Teleport_Flags)
+        ppcb = packets.PlayerPosition_ClientBound(ppcbData)
 
-        pass
+        # server data
+        
+        # player info update
+
+        # init world border
+
+        # update time
+
+        # set default spawn location (optional, "home" spawn,,, not where client will spawn in)
+
+        # game event (for telling the client to wait for chunks)
+            # DO
+
+        # set ticking state (sets the tickrate and if its frozen or not)
+
+        # set center chunk
+            # DO
+
+        # chunk data & update light (1 for each chunk to load)
+            # DO
+
+
+
+        self.queuedOutboundPackets.extend([ ppcb ])
+

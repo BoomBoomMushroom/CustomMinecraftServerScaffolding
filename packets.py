@@ -220,6 +220,46 @@ class ClientTickEnd_ServerBound(Packet):
     def handle(self):
         return
 
+class PlayerPosition_ClientBound(Packet):
+    def __init__(self, data = bytearray(0)):
+        super().__init__(0x48, "player_position", data, "ClientBound", "PLAY")
+class AcceptTeleportation_ServerBound(Packet):
+    def __init__(self, data = bytearray(0),):
+        super().__init__(0x0, "accept_teleportation", data, "ServerBound", "PLAY")
+    def handle(self):
+        teleportId = dataTypes.readVarInt(self.data)[0]
+        res = HandleResponse()
+        res.teleportId = teleportId
+
+        return res
+
+class MovePlayerPosRot_ServerBound(Packet):
+    def __init__(self, data = bytearray(0)):
+        super().__init__(0x1F, "move_player_pos_rot", data, "ServerBound", "PLAY")
+    def handle(self):
+        toConsume = self.data
+        x, bytesRead = dataTypes.readDouble(toConsume)
+        toConsume = toConsume[bytesRead:]
+        feetY, bytesRead = dataTypes.readDouble(toConsume)
+        toConsume = toConsume[bytesRead:]
+        z, bytesRead = dataTypes.readDouble(toConsume)
+        toConsume = toConsume[bytesRead:]
+        yaw, bytesRead = dataTypes.readFloat(toConsume)
+        toConsume = toConsume[bytesRead:]
+        pitch, bytesRead = dataTypes.readFloat(toConsume)
+        toConsume = toConsume[bytesRead:]
+        flags, bytesRead = dataTypes.readByte(toConsume)
+
+        onGround = (flags & 0x01) == 0x01
+        pushingWall = (flags & 0x02) == 0x02
+
+        res = HandleResponse()
+        res.updatePosition = (x, feetY, z)
+        res.updateRoation = (yaw, pitch)
+        res.updateOnGround = onGround
+        res.updateAgainstWall = pushingWall
+        return res
+
 # Extra classes
 class HandleResponse:
     def __init__(self):
@@ -230,11 +270,18 @@ class HandleResponse:
         # update client specific values
         self.updateUsername: str = None
         self.updateUUID: str = None
+        self.updatePosition: tuple[float, float, float] = None # x, y, z
+        self.updateRoation: tuple[float, float] = None # yaw, pitch
+        self.updateOnGround: bool = None
+        self.updateAgainstWall: bool = None
 
         # client todo flags:
         self.generateAndSendRegistryData = False
         self.giveLoginPacket = False
         self.stuffAfterLoginPacket = False
+
+        # Info to know that something did happen
+        self.teleportId: int = None
 
 
 
@@ -259,6 +306,8 @@ PLAY_PACKETS = [
     Login_ClientBound,
 
     ClientTickEnd_ServerBound,
+    PlayerPosition_ClientBound, AcceptTeleportation_ServerBound,
+    MovePlayerPosRot_ServerBound
 ]
 
 def decodePacket(data: bytes, connState: ConnectionState) -> tuple[bytes, Packet]:

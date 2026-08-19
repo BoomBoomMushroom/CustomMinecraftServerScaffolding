@@ -29,6 +29,8 @@ def handleClient(conn: socket.socket, addr: socket._RetAddress):
                     break
             if disconnectClient == True: break
 
+            if clientObj.queuedOutboundPackets == None: break
+
             # Send queue outbound packets
             while len(clientObj.queuedOutboundPackets) > 0:
                 outbound: packets.Packet = clientObj.queuedOutboundPackets.pop(0) # pop 1st for FIFO behaviour

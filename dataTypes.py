@@ -69,6 +69,9 @@ def writeUnsignedByte(value: int) -> bytes:
 def writeByte(value: int) -> bytes:
     return struct.pack("b", value)
 
+def readByte(value: int) -> tuple[int, int]:
+    val = struct.unpack("b", value)[0]
+    return (val, 1)
 
 # shorts
 def readUnsignedShort(data: bytes) -> tuple[int, int]:
@@ -85,6 +88,23 @@ def writeInt(val: int) -> bytes:
 # longs
 def writeSignedLong(value: int) -> bytes:
     return struct.pack("q", value)
+
+# floats
+def writeFloat(value: float) -> bytes:
+    return struct.pack("f", value)
+
+def readFloat(data: bytes) -> tuple[float, int]:
+    val = struct.unpack("f", data[0:4])[0]
+    return (val, 4)
+
+# doubles
+def writeDouble(value: float) -> bytes:
+    return struct.pack("d", value)
+
+def readDouble(data: bytes) -> tuple[float, int]:
+    val = struct.unpack("d", data[0:8])[0]
+    return (val, 8)
+
 
 # booleans
 def writeBoolean(value: bool) -> bytes:
