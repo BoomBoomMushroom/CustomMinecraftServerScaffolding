@@ -6,13 +6,15 @@ import os
 import json
 import io
 import nbtlib
+import random
 
 class Client:
     def __init__(self):
         self.username = ""
         self.UUID = ""
+        self.playerEntityId: int = dataTypes.readInt(random.randbytes(4))[0] # ramdom 4 byte EID
 
-        self.registries = []
+        self.registries: dict[str, list[int]] = {}
 
         self.state: packets.ConnectionState = "HANDSHAKING"
         self.data: bytes = bytes()
@@ -39,6 +41,8 @@ class Client:
 
         # client todo stuff
         if packetResponse.generateAndSendRegistryData == True: self.generateAndSendRegistryData()
+        if packetResponse.giveLoginPacket == True: self.generateAndSendLoginPacket()
+        if packetResponse.stuffAfterLoginPacket == True: self.generateAndSendStuffAfterLoginPacket()
         
 
     def handlePackets(self):
@@ -55,33 +59,40 @@ class Client:
         self.handlePackets()
 
     def generateAndSendRegistryData(self):
-        """
-        queuedRegisters = [
-            "banner_pattern", "damage_type", "dimension_type", "instrument", "jukebox_song", "painting_variant",
-            "sulfur_cube_archetype", "trim_material", "worldgen/biome", "cat_variant", "cat_sound_variant",
-            "chicken_variant", "chicken_sound_variant", "cow_variant", "cow_sound_variant", "frog_variant",
-            "pig_variant", "pig_sound_variant", "wolf_variant", "wolf_sound_variant", "zombie_nautilus_variant",
-        ]
-        """
-        #"""
-        queuedRegisters = [
-            "banner_pattern", "chat_type", "damage_type", "dialog", "dimension_type", "enchantment", "instrument",
-            "jukebox_song", "painting_variant", "sulfur_cube_archetype", "test_environment", "test_instance",
-            "timeline", "trim_material", "trim_pattern", "world_clock", "worldgen/biome", "cat_variant",
-            "cat_sound_variant", "chicken_variant", "chicken_sound_variant", "cow_variant", "cow_sound_variant",
-            "frog_variant", "pig_variant", "pig_sound_variant", "wolf_variant", "wolf_sound_variant",
-            "zombie_nautilus_variant",
-        ]
-        #"""
-        #queuedRegisters = ["timeline", "dimension_type", "world_clock"]
         #queuedRegisters = os.listdir(ServerSettings.registriesPath)
+        queuedRegisters: list[str] = [x[0].split(ServerSettings.registriesPath)[1][1:] for x in os.walk(ServerSettings.registriesPath)]
+        queuedRegisters.remove("")
+        queuedRegisters = [_ for _ in queuedRegisters if _.startswith("tags")==False] # remove tags folders
         #queuedRegisters.remove("tags") # this is the registry tags folder, we do not want to register these
-        #queuedRegisters.remove("recipe")
+        
+        # remove these once since we cant parse them as NBT
+        queuedRegisters.remove("recipe")
+        queuedRegisters = [_ for _ in queuedRegisters if _.startswith("villager_trade")==False]
+        queuedRegisters = [_ for _ in queuedRegisters if _.startswith("datapacks")==False]
+        queuedRegisters.remove("worldgen/density_function")
 
         for register in queuedRegisters:
             path = f"{ServerSettings.registriesPath}/{register}"
+            """
+            tagFiles = []
+            for (dirpath, dirname, filenames) in os.walk(path):
+                dirpath = dirpath.split(path)[1]
+                if dirpath != "":
+                    fs = [dirpath[1:]+"/"+_ for _ in filenames]
+                else:
+                    fs = filenames
+                tagFiles.extend(fs)
+            """
+
             tagFiles = [f for f in os.listdir(path) if os.path.isfile(os.path.join(path, f))]
-            tagFiles = [f for f in tagFiles if f.endswith(".json")]
+            tagFiles: list[str] = [f for f in tagFiles if f.endswith(".json")]
+
+            """
+            if register == "worldgen":
+                # remove the following:
+                tagFiles = [f for f in tagFiles if f.startswith("density_function/")==False]
+            """
+                
 
             packetData = bytes()
             packetData += dataTypes.writeIdentifier(f"minecraft:{register}")
@@ -92,8 +103,11 @@ class Client:
                 with open(f"{path}/{file}") as f: fileData = f.read()
 
                 nbtBytesIO = io.BytesIO()
-                #print(path, file, fileData)
-                nbt = nbtlib.parse_nbt(fileData)
+                try:
+                    nbt = nbtlib.parse_nbt(fileData)
+                except Exception as e:
+                    print(path, file, fileData)
+                    raise e
                 nbtlib.File(nbt).write(nbtBytesIO)
                 nbtBytes: bytes = nbtBytesIO.getvalue()
                 if ServerSettings.protocol >= 764:
@@ -105,22 +119,23 @@ class Client:
                 packetData += dataTypes.writeBoolean(True)
                 packetData += nbtBytes
 
-                self.registries.append(f"minecraft:{nameNoExtention}") # make sure we don't lose track of it!
+                key = f"minecraft:{register}"
+                arr = self.registries.get(key, [])
+                arr.append(f"minecraft:{nameNoExtention}") # make sure we don't lose track of it!
+                self.registries[key] = arr
 
+                #print(register, file)
+
+            if packetData == None: continue
             registryPacket = packets.RegistryData_ClientBound(packetData)
             self.queuedOutboundPackets.append( registryPacket )
 
-        #queuedTagsRegistries = ["timeline", "block"]
+
+        # registry tags
         queuedTagsRegistries = os.listdir(ServerSettings.registryTagsPath)
-        """
-        queuedTagsRegistries.remove("potion")
-        queuedTagsRegistries.remove("fluid")
-        queuedTagsRegistries.remove("game_event")
-        queuedTagsRegistries.remove("entity_type")
-        queuedTagsRegistries.remove("point_of_interest_type")
-        queuedTagsRegistries.remove("item")
-        queuedTagsRegistries.remove("block")
-        """
+        queuedTagsRegistries.remove("villager_trade")
+        queuedTagsRegistries.remove("worldgen")
+
         
         tagIdentifiersToValues: dict[str, list[int]] = {}
 
@@ -150,7 +165,6 @@ class Client:
                 skipTag = False
                 totalTagIndexes: list[int] = []
                 for value in tagValuesStr:
-                    print(tagIdentifier, value)
                     valueIndexes: list[int] = []
                     if value[0] == "#":
                         # This is a reference to another tag
@@ -163,10 +177,10 @@ class Client:
                             skipTag = True
                             break
                     else:
-                        #print(self.registries, value, path, tagFile)
                         idx = -1
                         try:
-                            idx = self.registries.index(value)
+                            arr = self.registries.get(f"minecraft:{tagRegister}", [])
+                            idx = arr.index(value)
                         except ValueError as e:
                             try:
                                 idx = ServerSettings.staticRegistries[f"minecraft:{tagRegister}"]["entries"][value]["protocol_id"]
@@ -201,14 +215,12 @@ class Client:
             if skipTagRegister: continue
 
             # All tags processed have been processed
-            print(len(tagObjects))
             entryBytes: bytes = bytes()
             entryBytes += dataTypes.writeIdentifier(f"minecraft:{tagRegister}")
             entryBytes += dataTypes.writeVarInt(len(tagObjects))
             for tagObj in tagObjects:
                 entryBytes += tagObj
             taggedRegistersEntries.append(entryBytes)
-            print("taggedregentry added")
 
 
         updateTagsPacketData = bytes()
@@ -222,3 +234,51 @@ class Client:
         finishConfigPacket = packets.FinishConfiguration_ClientBound()
         self.queuedOutboundPackets.append(finishConfigPacket)
 
+    def generateAndSendLoginPacket(self):
+        playData: bytes = bytes()
+        playData += dataTypes.writeInt(self.playerEntityId) # player entity id, EID
+        playData += dataTypes.writeBoolean(False) # is hardcore
+        # dimention names
+        playData += dataTypes.writeVarInt(3)
+        playData += dataTypes.writeIdentifier("minecraft:overworld")
+        playData += dataTypes.writeIdentifier("minecraft:nether")
+        playData += dataTypes.writeIdentifier("minecraft:the_end")
+        playData += dataTypes.writeVarInt(0) # max players, used to draw tablist but now ignored
+        playData += dataTypes.writeVarInt(32) # render distance (2-32)
+        playData += dataTypes.writeVarInt(16) # simulation dist
+        playData += dataTypes.writeBoolean(False) # reduced debug info (false for development)
+        playData += dataTypes.writeBoolean(ServerSettings.gameRules.doImmediateRespawn==False) # enable respawn screen
+        playData += dataTypes.writeBoolean(False) # do limited crafting (unused by client)
+        playData += dataTypes.writeVarInt( self.registries.get("minecraft:dimension_type").index("minecraft:overworld") ) # dimention type
+        playData += dataTypes.writeIdentifier("minecraft:overworld") # dimention name
+        playData += dataTypes.writeSignedLong(0) # hashed seed, first 8 bytes of it
+        playData += dataTypes.writeUnsignedByte(2) # game mode, 0=surv, 1=crea, 2=adv, 3=spec
+        playData += dataTypes.writeByte(-1) # previous gamemode, used for F3+F4. Same as above just -1 is null
+        playData += dataTypes.writeBoolean(False) # is debug world
+        playData += dataTypes.writeBoolean(False) # is superflat world
+        playData += dataTypes.writeBoolean(False) # has death location. makes the next 2 fields present
+        #playData += dataTypes.writeIdentifier("minecraft:overworld") # last death dimention name
+        #playData += dataTypes.writePosition(fill it out here) # last death pos
+        playData += dataTypes.writeVarInt(0) # portal cooldown in ticks
+        playData += dataTypes.writeVarInt(60) # sea level
+        playData += dataTypes.writeBoolean(False) # online mode
+        playData += dataTypes.writeBoolean(False) # enforces secure chat
+
+        playPacket = packets.Login_ClientBound(playData)
+        self.queuedOutboundPackets.append(playPacket)
+
+        response = packets.HandleResponse()
+        response.stuffAfterLoginPacket = True
+        self.handlePacketReturn(response)
+
+    def generateAndSendStuffAfterLoginPacket(self):
+        # change difficulty packet
+        # player abilities packet
+        # set held item packet
+        # update recipes packet
+        # entity event packet | for the OP permission level
+        # commands packet
+        # update recipe book packet
+        # syncronize player position packet
+
+        pass

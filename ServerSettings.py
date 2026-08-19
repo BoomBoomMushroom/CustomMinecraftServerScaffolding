@@ -1,8 +1,12 @@
 import json
 
+class GameRules:
+    doImmediateRespawn = True
+
 class ServerSettings:
     version = "26.2"
     protocol = 776
+    gameRules: GameRules = GameRules
 
     maxPlayers: int = 20
     playersOnline: int = 0
@@ -18,4 +22,5 @@ class ServerSettings:
 
     def __init__(self):
         pass
+
 

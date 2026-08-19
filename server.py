@@ -34,7 +34,12 @@ def handleClient(conn: socket.socket, addr: socket._RetAddress):
                 outbound: packets.Packet = clientObj.queuedOutboundPackets.pop(0) # pop 1st for FIFO behaviour
                 print("Sending packet:", outbound)
                 packetBytes = outbound.getRawBytes()
-                conn.send(packetBytes)
+                try:
+                    conn.send(packetBytes)
+                except BlockingIOError as e:
+                    clientObj.queuedOutboundPackets.insert(0, outbound)
+                    break
+                except Exception as e: raise e
 
         except ConnectionResetError:
             print(f"Client {addr} has disconnected")

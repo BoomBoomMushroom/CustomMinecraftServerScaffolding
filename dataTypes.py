@@ -63,15 +63,28 @@ def writeString(toWrite: str) -> bytes:
     #if len(lenBytes) > 3: raise Exception("Length of stringLength varint cannot be more than 3 bytes!")
     return lenBytes + toWrite.encode("utf-8")
 
+# bytes
+def writeUnsignedByte(value: int) -> bytes:
+    return struct.pack("B", value)
+def writeByte(value: int) -> bytes:
+    return struct.pack("b", value)
+
 
 # shorts
 def readUnsignedShort(data: bytes) -> tuple[int, int]:
-    val = struct.unpack('H', data[0:2])
+    val = struct.unpack('H', data[0:2])[0]
     return (val, 2)
+
+# ints
+def readInt(data: bytes) -> tuple[int, int]:
+    val = struct.unpack('i', data[0:4])[0]
+    return (val, 4)
+def writeInt(val: int) -> bytes:
+    return struct.pack('i', val)
 
 # longs
 def writeSignedLong(value: int) -> bytes:
-    return struct.pack("l", value)
+    return struct.pack("q", value)
 
 # booleans
 def writeBoolean(value: bool) -> bytes:

@@ -188,17 +188,37 @@ class ClientInformation_ServerBound(Packet):
 class RegistryData_ClientBound(Packet):
     def __init__(self, data = bytearray(0)):
         super().__init__(0x7, "registry_data", data, "ClientBound", "CONFIGURATION")
+    def __str__(self):
+        return super().__str__() + ", Register: " + dataTypes.readIdentifier(self.data)[0]
 
 class FinishConfiguration_ClientBound(Packet):
     def __init__(self, data = bytearray(0)):
         super().__init__(0x3, "finish_configuration", data, "ClientBound", "CONFIGURATION")
+class FinishConfiguration_ServerBound(Packet):
+    def __init__(self, data = bytearray(0)):
+        super().__init__(0x3, "finish_configuration", data, "ServerBound", "CONFIGURATION")
+    def handle(self):
+        response = HandleResponse()
+        response.nextConnectionState = "PLAY"
+
+        response.giveLoginPacket = True
+
+        return response
 
 class UpdateTags_ClientBound(Packet):
     def __init__(self, data = bytearray(0)):
         super().__init__(0xD, "update_tags", data, "ClientBound", "CONFIGURATION")
 
 # Play packets
+class Login_ClientBound(Packet):
+    def __init__(self, data = bytearray(0)):
+        super().__init__(0x31, "login", data, "ClientBound", "PLAY")
 
+class ClientTickEnd_ServerBound(Packet):
+    def __init__(self, data = bytearray(0)):
+        super().__init__(0x0d, "client_tick_end", data, "ServerBound", "PLAY")
+    def handle(self):
+        return
 
 # Extra classes
 class HandleResponse:
@@ -213,6 +233,8 @@ class HandleResponse:
 
         # client todo flags:
         self.generateAndSendRegistryData = False
+        self.giveLoginPacket = False
+        self.stuffAfterLoginPacket = False
 
 
 
@@ -230,10 +252,14 @@ LOGIN_PACKETS = [
 CONFIGURATION_PACKETS = [
     ClientInformation_ServerBound,
     RegistryData_ClientBound,
-    FinishConfiguration_ClientBound,
+    FinishConfiguration_ClientBound, FinishConfiguration_ServerBound,
     UpdateTags_ClientBound
 ]
-PLAY_PACKETS = []
+PLAY_PACKETS = [
+    Login_ClientBound,
+
+    ClientTickEnd_ServerBound,
+]
 
 def decodePacket(data: bytes, connState: ConnectionState) -> tuple[bytes, Packet]:
     if len(data) <= 0: return (data, None) # No bytes... We can't do anything that that!
@@ -271,6 +297,7 @@ def decodePacket(data: bytes, connState: ConnectionState) -> tuple[bytes, Packet
         break # all good, break to continue
 
     if packet == None:
+        packetId = "0x" + (hex(packetId).split("0x")[1]).zfill(2)
         print(f"Unknown packet state and or id! {packetId=} {connState=}")
 
     return (returnRemainingBytes, packet)
