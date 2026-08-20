@@ -4,10 +4,6 @@ import client
 import socket
 import threading
 
-HOST = "localhost"
-PORT = 25565
-
-
 def handleClient(conn: socket.socket, addr: socket._RetAddress):
     print(f"Connected by {addr}")
     clientObj = client.Client()
@@ -50,21 +46,28 @@ def handleClient(conn: socket.socket, addr: socket._RetAddress):
     conn.close()
     print(f"Connection with {addr} closed")
 
+s: socket.socket = None
 
-if __name__ != "__main__": exit()
-# everything after here executes if we are on main
+def startSocketServer():
+    global s
+    HOST = "localhost"
+    PORT = 25565
 
-s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)  # Enable reuse to prevent "Address already in use" when debugging
-s.bind((HOST, PORT))
-s.listen()
-print(f"Server started on {HOST}:{PORT}")
+    s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)  # Enable reuse to prevent "Address already in use" when debugging
+    s.bind((HOST, PORT))
+    s.listen()
+    print(f"Server started on {HOST}:{PORT}")
 
-while True:
-    # accept a connection
-    conn, addr = s.accept()
-    conn.setblocking(False) # make the sockets not blocking
+    while True:
+        # accept a connection
+        conn, addr = s.accept()
+        conn.setblocking(False) # make the sockets not blocking
 
-    t = threading.Thread(target=handleClient, args=(conn,addr), daemon=True)
-    t.start()
+        t = threading.Thread(target=handleClient, args=(conn,addr), daemon=True)
+        t.start()
+
+
+if __name__ == "__main__":
+    startSocketServer()
 

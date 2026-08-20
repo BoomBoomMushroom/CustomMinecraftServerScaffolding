@@ -1,19 +1,40 @@
 import packets
 import dataTypes
 from ServerSettings import ServerSettings
+from world import World
+from enumValues import *
 
 import os
 import json
 import io
 import nbtlib
 import random
+import requests
+
+
+def getAllSubDirs(basePath: str) -> list[str]:
+    baseLen = len(basePath.rstrip(os.sep)) + 1
+    subdirs = []
+
+    def _scan(path):
+        try:
+            with os.scandir(path) as it:
+                for entry in it:
+                    if entry.is_dir(follow_symlinks=False):
+                        subdirs.append(entry.path[baseLen:])
+                        _scan(entry.path)
+        except PermissionError: pass
+
+    _scan(basePath)
+    return subdirs
+
 
 class Client:
     def __init__(self):
         self.username = ""
-        self.UUID = ""
+        self.UUID = None
         self.posX: float = 0
-        self.posY: float = 0
+        self.posY: float = 70
         self.posZ: float = 0
         self.velX: float = 0
         self.velY: float = 0
@@ -21,6 +42,10 @@ class Client:
         self.yaw: float = 0
         self.pitch: float = 0
         self.onGround = False
+        self.gamemode: GAMEMODE = "NULL"
+
+        self.isUnsignedplayerPropertiesFromAPI: bool = False
+        self.playerPropertiesFromAPI: list[dict[str, str]] = [] # list of properties from the mojang api for our player. eg textures & capes
 
         # Special numbers that can tick up, keep track of these
         self.playerEntityId: int = dataTypes.readInt(random.randbytes(4))[0] # ramdom 4 byte EID
@@ -33,12 +58,8 @@ class Client:
         self.unhandledPackets: list[packets.Packet] = []
         self.queuedOutboundPackets: list[packets.Packet] = []
 
-    def readAllPackets(self):
-        while True:
-            # typing is given by the return typing of decodePacket (a tuple[bytes, Packet])
-            self.socketData, packet = packets.decodePacket(self.socketData, self.state)
-            if packet == None: break
-            self.unhandledPackets.append(packet)
+    def getRegistryData(self, namespace: str, identifier: str) -> int:
+        return self.registries.get(namespace).index(identifier)
 
     def handlePacketReturn(self, packetResponse: packets.HandleResponse):
         if packetResponse == None: return
@@ -49,78 +70,106 @@ class Client:
 
         # update the client's data
         if packetResponse.updateUsername != None: self.username = packetResponse.updateUsername
-        if packetResponse.updateUUID != None: self.UUID = packetResponse.updateUUID
+        if packetResponse.updateUUID != None:
+            self.UUID = packetResponse.updateUUID
+            self.generatePlayerPropertiesFromAPI() # now that we have the UUID fetch it's data from mojang servers
+            
         if packetResponse.updatePosition != None: self.posX, self.posY, self.posZ = packetResponse.updatePosition
         if packetResponse.updateRoation != None: self.yaw, self.pitch = packetResponse.updateRoation
         if packetResponse.updateOnGround != None: self.onGround = packetResponse.updateOnGround
         if packetResponse.updateAgainstWall != None: pass # dont care abt it rn
 
         # client todo stuff
+        if packetResponse.sendLoginFinishedPacket == True: self.sendLoginFinishedPacket()
         if packetResponse.generateAndSendRegistryData == True: self.generateAndSendRegistryData()
-        if packetResponse.giveLoginPacket == True: self.generateAndSendLoginPacket()
-        if packetResponse.stuffAfterLoginPacket == True: self.generateAndSendStuffAfterLoginPacket()
+        if packetResponse.clientLoginToWorld == True: World.onPlayerJoin(self)
 
         # info from packets to know stuff happened
         if packetResponse.teleportId != None:
             if packetResponse.teleportId == self.teleportId:
                 print(f"~~~ Teleport (id: {packetResponse.teleportId}) was successful")
 
-        
+    def generatePlayerPropertiesFromAPI(self):
+        if self.UUID == None: return
+
+        uuidString = "".join([ hex(b).split("0x")[1].zfill(2) for b in self.UUID ])
+        r = requests.get(f"https://sessionserver.mojang.com/session/minecraft/profile/{uuidString}?unsigned={self.isUnsignedplayerPropertiesFromAPI}")
+        self.playerPropertiesFromAPI = r.json()["properties"]
+
+    def getNextPacket(self):
+        self.socketData, packet = packets.decodePacket(self.socketData, self.state)
+        return packet
 
     def handlePackets(self):
-        self.readAllPackets()
-
-        while len(self.unhandledPackets) > 0:
-            packet = self.unhandledPackets.pop(0) # pop the first one for a FIFO queue
+        while True:
+            packet = self.getNextPacket()
+            if packet == None: break
             print(packet)
             try:
                 response = packet.handle()
                 self.handlePacketReturn(response)
             except Exception as e:
-                #raise e
-                self.queuedOutboundPackets = None # the thread will see this is None and end the connection
+                raise e
+                #self.queuedOutboundPackets = None # the thread will see this is None and end the connection
                 pass
 
     def readInBytes(self, newData: bytes):
         self.socketData += newData
         self.handlePackets()
 
-    def generateAndSendRegistryData(self):
-        #queuedRegisters = os.listdir(ServerSettings.registriesPath)
-        queuedRegisters: list[str] = [x[0].split(ServerSettings.registriesPath)[1][1:] for x in os.walk(ServerSettings.registriesPath)]
-        queuedRegisters.remove("")
-        queuedRegisters = [_ for _ in queuedRegisters if _.startswith("tags")==False] # remove tags folders
-        #queuedRegisters.remove("tags") # this is the registry tags folder, we do not want to register these
-        
-        # remove these once since we cant parse them as NBT
-        queuedRegisters.remove("recipe")
-        queuedRegisters = [_ for _ in queuedRegisters if _.startswith("villager_trade")==False]
-        queuedRegisters = [_ for _ in queuedRegisters if _.startswith("datapacks")==False]
-        queuedRegisters.remove("worldgen/density_function")
+    def getGameProfile(self, ignoreUUID=False) -> bytes:
+        out = bytes()
+        if ignoreUUID == False: out += self.UUID
+        out += dataTypes.writeString(self.username)
+        out += dataTypes.writeVarInt( len(self.playerPropertiesFromAPI) )
+        for property in self.playerPropertiesFromAPI:
+            isSigned = not self.isUnsignedplayerPropertiesFromAPI
+            out += dataTypes.writeString(property["name"])
+            out += dataTypes.writeString(property["value"])
+            out += dataTypes.writeBoolean( isSigned )
+            if isSigned: out += dataTypes.writeString(property["signature"])
+        return out
 
+    def sendLoginFinishedPacket(self):
+        packetData: bytes = bytes()
+        packetData += self.getGameProfile()        
+        packetData += bytes(16) # Session ID (as a UUID) | I don't think it really matters so im making it all 0s for right now
+
+        self.queuedOutboundPackets.append(packets.LoginFinished_ClientBound(packetData))
+
+    def generateAndSendRegistryData(self):
+        """
+        queuedRegisters: list[str] = getAllSubDirs(ServerSettings.registriesPath)
+        filteredQueuedRegisters = []
+        for reg in queuedRegisters:
+            if reg.startswith("tags"): continue # this is the registry tags folder, we do not want to register these
+
+            # remove these once since we cant parse them as NBT or they're so big i just wanna skip them
+            if reg.startswith("recipe"): continue
+            if reg.startswith("villager_trade"): continue
+            if reg.startswith("datapacks"): continue
+            if reg.startswith("advancement"): continue
+            if reg.startswith("loot_table"): continue
+            if reg.startswith("structure"): continue
+            if reg.startswith("trial_spawner"): continue
+            if reg.startswith("trade_set"): continue
+            if reg.startswith("worldgen/template_pool"): continue
+            if reg.startswith("worldgen/density_function"): continue
+
+            filteredQueuedRegisters.append(reg)
+        queuedRegisters = filteredQueuedRegisters
+        """
+
+        # from the above list, when printed i just copied it here to speed it up for now
+        queuedRegisters = ["enchantment", "jukebox_song", "test_instance", "wolf_variant", "test_environment", "chicken_sound_variant", "cow_sound_variant", "pig_sound_variant", "dimension_type", "enchantment_provider", "enchantment_provider/raid", "sulfur_cube_archetype", "cat_variant", "cow_variant", "chat_type", "frog_variant", "damage_type", "worldgen", "worldgen/structure", "worldgen/world_preset", "worldgen/biome", "worldgen/placed_feature", "worldgen/structure_set", "worldgen/noise_settings", "worldgen/processor_list", "worldgen/configured_feature", "worldgen/multi_noise_biome_source_parameter_list", "worldgen/flat_level_generator_preset", "worldgen/noise", "worldgen/noise/nether", "worldgen/configured_carver", "banner_pattern", "zombie_nautilus_variant", "world_clock", "painting_variant", "cat_sound_variant", "wolf_sound_variant", "timeline", "dialog", "chicken_variant", "pig_variant", "trim_pattern", "instrument", "trim_material"]
+        
         for register in queuedRegisters:
+            print(register)
             path = f"{ServerSettings.registriesPath}/{register}"
-            """
-            tagFiles = []
-            for (dirpath, dirname, filenames) in os.walk(path):
-                dirpath = dirpath.split(path)[1]
-                if dirpath != "":
-                    fs = [dirpath[1:]+"/"+_ for _ in filenames]
-                else:
-                    fs = filenames
-                tagFiles.extend(fs)
-            """
 
             tagFiles = [f for f in os.listdir(path) if os.path.isfile(os.path.join(path, f))]
             tagFiles: list[str] = [f for f in tagFiles if f.endswith(".json")]
-
-            """
-            if register == "worldgen":
-                # remove the following:
-                tagFiles = [f for f in tagFiles if f.startswith("density_function/")==False]
-            """
-                
-
+            
             packetData = bytes()
             packetData += dataTypes.writeIdentifier(f"minecraft:{register}")
             packetData += dataTypes.writeVarInt(len(tagFiles))
@@ -260,96 +309,4 @@ class Client:
 
         finishConfigPacket = packets.FinishConfiguration_ClientBound()
         self.queuedOutboundPackets.append(finishConfigPacket)
-
-    def generateAndSendLoginPacket(self):
-        playData: bytes = bytes()
-        playData += dataTypes.writeInt(self.playerEntityId) # player entity id, EID
-        playData += dataTypes.writeBoolean(False) # is hardcore
-        # dimention names
-        playData += dataTypes.writeVarInt(3)
-        playData += dataTypes.writeIdentifier("minecraft:overworld")
-        playData += dataTypes.writeIdentifier("minecraft:nether")
-        playData += dataTypes.writeIdentifier("minecraft:the_end")
-        playData += dataTypes.writeVarInt(0) # max players, used to draw tablist but now ignored
-        playData += dataTypes.writeVarInt(32) # render distance (2-32)
-        playData += dataTypes.writeVarInt(16) # simulation dist
-        playData += dataTypes.writeBoolean(False) # reduced debug info (false for development)
-        playData += dataTypes.writeBoolean(ServerSettings.gameRules.doImmediateRespawn==False) # enable respawn screen
-        playData += dataTypes.writeBoolean(False) # do limited crafting (unused by client)
-        playData += dataTypes.writeVarInt( self.registries.get("minecraft:dimension_type").index("minecraft:overworld") ) # dimention type
-        playData += dataTypes.writeIdentifier("minecraft:overworld") # dimention name
-        playData += dataTypes.writeSignedLong(0) # hashed seed, first 8 bytes of it
-        playData += dataTypes.writeUnsignedByte(2) # game mode, 0=surv, 1=crea, 2=adv, 3=spec
-        playData += dataTypes.writeByte(-1) # previous gamemode, used for F3+F4. Same as above just -1 is null
-        playData += dataTypes.writeBoolean(False) # is debug world
-        playData += dataTypes.writeBoolean(False) # is superflat world
-        playData += dataTypes.writeBoolean(False) # has death location. makes the next 2 fields present
-        #playData += dataTypes.writeIdentifier("minecraft:overworld") # last death dimention name
-        #playData += dataTypes.writePosition(fill it out here) # last death pos
-        playData += dataTypes.writeVarInt(0) # portal cooldown in ticks
-        playData += dataTypes.writeVarInt(60) # sea level
-        playData += dataTypes.writeBoolean(False) # online mode
-        playData += dataTypes.writeBoolean(False) # enforces secure chat
-
-        playPacket = packets.Login_ClientBound(playData)
-        self.queuedOutboundPackets.append(playPacket)
-
-        response = packets.HandleResponse()
-        response.stuffAfterLoginPacket = True
-        self.handlePacketReturn(response)
-
-    def generateAndSendStuffAfterLoginPacket(self):
-        # change difficulty packet
-        
-        # player abilities packet
-        
-        # set held item packet
-        
-        # update recipes packet
-        
-        # entity event packet | for the OP permission level
-        
-        # commands packet
-        
-        # update recipe book packet
-        
-        # syncronize player position packet
-        ppcbData: bytes = bytes()
-        self.teleportId += 1
-        ppcbData += dataTypes.writeVarInt(self.teleportId) # teleport id, will be used to confirm in confirm teleport packet
-        ppcbData += dataTypes.writeDouble(self.posX) # X
-        ppcbData += dataTypes.writeDouble(self.posY) # Y
-        ppcbData += dataTypes.writeDouble(self.posZ) # Z
-        ppcbData += dataTypes.writeDouble(self.velX) # Vx
-        ppcbData += dataTypes.writeDouble(self.velY) # Vy
-        ppcbData += dataTypes.writeDouble(self.velZ) # Vz
-        ppcbData += dataTypes.writeFloat(self.yaw) # yaw, in degrees
-        ppcbData += dataTypes.writeFloat(self.pitch) # pitch, in degrees
-        ppcbData += dataTypes.writeInt(0) # teleport flags (https://minecraft.wiki/w/Java_Edition_protocol/Packets#Teleport_Flags)
-        ppcb = packets.PlayerPosition_ClientBound(ppcbData)
-
-        # server data
-        
-        # player info update
-
-        # init world border
-
-        # update time
-
-        # set default spawn location (optional, "home" spawn,,, not where client will spawn in)
-
-        # game event (for telling the client to wait for chunks)
-            # DO
-
-        # set ticking state (sets the tickrate and if its frozen or not)
-
-        # set center chunk
-            # DO
-
-        # chunk data & update light (1 for each chunk to load)
-            # DO
-
-
-
-        self.queuedOutboundPackets.extend([ ppcb ])
 

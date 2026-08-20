@@ -1,7 +1,6 @@
-import json
+from gameRules import GameRules
 
-class GameRules:
-    doImmediateRespawn = True
+import json
 
 class ServerSettings:
     version = "26.2"

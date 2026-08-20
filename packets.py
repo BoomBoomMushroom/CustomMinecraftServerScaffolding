@@ -1,13 +1,10 @@
 import dataTypes
 from ServerSettings import ServerSettings
+from enumValues import *
 
-from typing import Literal
 import time
 import json
-import requests
 
-BoundDirection = Literal["ServerBound", "ClientBound"]
-ConnectionState = Literal["HANDSHAKING", "STATUS", "LOGIN", "CONFIGURATION", "PLAY"]
 
 # https://minecraft.wiki/w/Java_Edition_protocol/Packets#List_of_packets
 
@@ -118,11 +115,7 @@ class Hello_ServerBound(Packet):
         response = HandleResponse()
         response.updateUsername = name
         response.updateUUID = UUID
-
-        # If we don't want to do encryption or compression go right on into finishing the login procedure
-        loginFinishedPacket = LoginFinished_ClientBound()
-        loginFinishedPacket.createFromUUID(UUID)
-        response.respondWithPackets.append(loginFinishedPacket)
+        response.sendLoginFinishedPacket = True
 
         return response
 
@@ -140,24 +133,6 @@ class LoginAcknowledged_ServerBound(Packet):
 class LoginFinished_ClientBound(Packet):
     def __init__(self, data = bytearray(0)):
         super().__init__(0x2, "login_finished", data, "ClientBound", "LOGIN")
-
-    def createFromUUID(self, UUID: bytes):
-        self.data = bytes() # clear the data to override it
-        
-        uuidString = "".join([ hex(b).split("0x")[1].zfill(2) for b in UUID ])
-        r = requests.get(f"https://sessionserver.mojang.com/session/minecraft/profile/{uuidString}?unsigned=false")
-        mcData = r.json()
-
-        # Write Game Profile
-        self.data += UUID
-        self.data += dataTypes.writeString(mcData["name"])
-        self.data += dataTypes.writeVarInt(1)
-        self.data += dataTypes.writeString(mcData["properties"][0]["name"])
-        self.data += dataTypes.writeString(mcData["properties"][0]["value"])
-        self.data += dataTypes.writeBoolean(True) # if we dont want the signiture then set it to false and comment out the next line
-        self.data += dataTypes.writeString(mcData["properties"][0]["signature"])
-        # Write Session ID (as a UUID)
-        self.data += bytes(16) # I don't think it matters what I make the UUID, so it'll be all 0s for rn
 
 # Configuration packets
 class ClientInformation_ServerBound(Packet):
@@ -201,13 +176,23 @@ class FinishConfiguration_ServerBound(Packet):
         response = HandleResponse()
         response.nextConnectionState = "PLAY"
 
-        response.giveLoginPacket = True
+        response.clientLoginToWorld = True
 
         return response
 
 class UpdateTags_ClientBound(Packet):
     def __init__(self, data = bytearray(0)):
         super().__init__(0xD, "update_tags", data, "ClientBound", "CONFIGURATION")
+
+class CustomPayload_ServerBound(Packet):
+    def __init__(self, data = bytearray(0)):
+        super().__init__(0x2, "custom_payload", data, "ServerBound", "CONFIGURATION")
+    def handle(self):
+        channel, bytesRead = dataTypes.readIdentifier(self.data)
+        channelData = self.data[bytesRead:]
+
+        # ehh idk how to really handle this and it really doesn't matter so im gonna ignore this
+        return None
 
 # Play packets
 class Login_ClientBound(Packet):
@@ -260,6 +245,23 @@ class MovePlayerPosRot_ServerBound(Packet):
         res.updateAgainstWall = pushingWall
         return res
 
+class ChangeDifficulty_ClientBound(Packet):
+    def __init__(self, data = bytearray(0)):
+        super().__init__(0xA, "change_difficulty", data, "ClientBound", "PLAY")
+
+class PlayerAbilities_ClientBound(Packet):
+    def __init__(self, data = bytearray(0)):
+        super().__init__(0x40, "player_abilities", data, "ClientBound", "PLAY")
+
+class SetHeldSlot_ClientBound(Packet):
+    def __init__(self, data = bytearray(0)):
+        super().__init__(0x69, "set_held_slot", data, "ClientBound", "PLAY")
+
+class PlayerInfoUpdate_ClientBound(Packet):
+    def __init__(self, data = bytearray(0)):
+        super().__init__(0x46, "player_info_update", data, "ClientBound", "PLAY")
+
+
 # Extra classes
 class HandleResponse:
     def __init__(self):
@@ -269,16 +271,16 @@ class HandleResponse:
 
         # update client specific values
         self.updateUsername: str = None
-        self.updateUUID: str = None
+        self.updateUUID: bytes = None
         self.updatePosition: tuple[float, float, float] = None # x, y, z
         self.updateRoation: tuple[float, float] = None # yaw, pitch
         self.updateOnGround: bool = None
         self.updateAgainstWall: bool = None
 
         # client todo flags:
+        self.sendLoginFinishedPacket = False
         self.generateAndSendRegistryData = False
-        self.giveLoginPacket = False
-        self.stuffAfterLoginPacket = False
+        self.clientLoginToWorld = False
 
         # Info to know that something did happen
         self.teleportId: int = None
@@ -290,24 +292,28 @@ class HandleResponse:
 HANDSHAKING_PACKETS = [Intention_ServerBound]
 STATUS_PACKETS = [
     StatusResponse_ClientBound, StatusResponse_ServerBound,
-    PongResponse_ClientBound, PingResponse_ServerBound
+    PongResponse_ClientBound, PingResponse_ServerBound,
 ]
 LOGIN_PACKETS = [
     Hello_ServerBound,
-    LoginFinished_ClientBound, LoginAcknowledged_ServerBound
+    LoginFinished_ClientBound, LoginAcknowledged_ServerBound,
 ]
 CONFIGURATION_PACKETS = [
     ClientInformation_ServerBound,
     RegistryData_ClientBound,
     FinishConfiguration_ClientBound, FinishConfiguration_ServerBound,
-    UpdateTags_ClientBound
+    UpdateTags_ClientBound,
+    CustomPayload_ServerBound,
 ]
 PLAY_PACKETS = [
     Login_ClientBound,
 
     ClientTickEnd_ServerBound,
     PlayerPosition_ClientBound, AcceptTeleportation_ServerBound,
-    MovePlayerPosRot_ServerBound
+    MovePlayerPosRot_ServerBound,
+    ChangeDifficulty_ClientBound,
+    PlayerAbilities_ClientBound,
+    SetHeldSlot_ClientBound,
 ]
 
 def decodePacket(data: bytes, connState: ConnectionState) -> tuple[bytes, Packet]:
