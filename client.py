@@ -58,8 +58,11 @@ class Client:
         self.unhandledPackets: list[packets.Packet] = []
         self.queuedOutboundPackets: list[packets.Packet] = []
 
+    def getRegistryNamespaceList(self, namespace: str) -> list[str]:
+        return self.registries.get(namespace)
+
     def getRegistryData(self, namespace: str, identifier: str) -> int:
-        return self.registries.get(namespace).index(identifier)
+        return self.getRegistryNamespaceList(namespace).index(identifier)
 
     def handlePacketReturn(self, packetResponse: packets.HandleResponse):
         if packetResponse == None: return

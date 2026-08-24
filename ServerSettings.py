@@ -19,7 +19,13 @@ class ServerSettings:
         staticRegistries = json.load(f)
 
 
-    def __init__(self):
-        pass
+    @classmethod
+    def getRegistryNamespaceList(cls, namespace: str) -> list[str]:
+        return cls.staticRegistries.get(namespace)
+    @classmethod
+    def getRegistryData(cls, namespace: str, identifier: str) -> int:
+        return cls.getRegistryNamespaceList(namespace)["entries"][identifier]["protocol_id"]
+
+
 
 

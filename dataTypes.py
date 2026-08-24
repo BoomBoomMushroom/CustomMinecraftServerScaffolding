@@ -37,7 +37,7 @@ def readVarInt(data: bytes) -> tuple[int, int]: # value, bytesRead
 
     raise Exception("Varint too big")
 
-def writeVarInt(value: int):
+def writeVarInt(value: int) -> bytes:
     writer = BytesWriter()
     while (value & ~0x7F) != 0:
         writer.appendInt( (value & 0x7F) | 0x80 )
@@ -46,6 +46,13 @@ def writeVarInt(value: int):
     
     writer.appendInt(value & 0xFF)
     return writer.data
+
+# VarLongs
+def readVarLong(data: bytes) -> tuple[int, int]:
+    return readVarInt(data)
+
+def writeVarLong(value: int):
+    return writeVarInt(value)
 
 
 # strings
@@ -78,6 +85,18 @@ def readUnsignedShort(data: bytes) -> tuple[int, int]:
     val = struct.unpack('H', data[0:2])[0]
     return (val, 2)
 
+def writeUnsignedShort(value: int) -> bytes:
+    data = struct.pack('H', value)
+    return data
+
+def readShort(data: bytes) -> tuple[int, int]:
+    val = struct.unpack('h', data[0:2])[0]
+    return (val, 2)
+
+def writeShort(value: int) -> bytes:
+    data = struct.pack('h', value)
+    return data
+
 # ints
 def readInt(data: bytes) -> tuple[int, int]:
     val = struct.unpack('i', data[0:4])[0]
@@ -86,7 +105,7 @@ def writeInt(val: int) -> bytes:
     return struct.pack('i', val)
 
 # longs
-def writeSignedLong(value: int) -> bytes:
+def writeLong(value: int) -> bytes:
     return struct.pack("q", value)
 
 # floats
@@ -130,6 +149,10 @@ def writeIdentifier(identifier: str) -> bytes:
     readIdentifier(b) # if it is an invalid identifier it will raise an exception in here
     return b
 
+
+
+def reverseBits(value: int, bits: int=8) -> int:
+    return int( ('{:0'+str(bits)+'b}').format(value)[::-1], 2)
 
 
 if __name__ == "__main__":

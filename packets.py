@@ -94,7 +94,7 @@ class PingResponse_ServerBound(Packet):
     def handle(self):
         responseLong = round(time.time() * 1000)
         responseBytes: bytes = bytes()
-        responseBytes += dataTypes.writeSignedLong(responseLong)
+        responseBytes += dataTypes.writeLong(responseLong)
 
         response = HandleResponse()
         response.respondWithPackets.append(PongResponse_ClientBound( responseBytes ))
@@ -198,13 +198,18 @@ class CustomPayload_ServerBound(Packet):
 class Login_ClientBound(Packet):
     def __init__(self, data = bytearray(0)):
         super().__init__(0x31, "login", data, "ClientBound", "PLAY")
-
 class ClientTickEnd_ServerBound(Packet):
     def __init__(self, data = bytearray(0)):
         super().__init__(0x0d, "client_tick_end", data, "ServerBound", "PLAY")
     def handle(self):
         return
+class PlayerLoaded_ServerBound(Packet):
+    def __init__(self, data = bytearray(0),):
+        super().__init__(0x2C, "player_loaded", data, "ServerBound", "PLAY")
+    def handle(self):
+        pass # nothing much to really handle
 
+"""Position"""
 class PlayerPosition_ClientBound(Packet):
     def __init__(self, data = bytearray(0)):
         super().__init__(0x48, "player_position", data, "ClientBound", "PLAY")
@@ -217,7 +222,27 @@ class AcceptTeleportation_ServerBound(Packet):
         res.teleportId = teleportId
 
         return res
+class MovePlayerPos_ServerBound(Packet):
+    def __init__(self, data = bytearray(0)):
+        super().__init__(0x1E, "set_player_pos", data, "ServerBound", "PLAY")
+    def handle(self):
+        toConsume = self.data
+        x, bytesRead = dataTypes.readDouble(toConsume)
+        toConsume = toConsume[bytesRead:]
+        feetY, bytesRead = dataTypes.readDouble(toConsume)
+        toConsume = toConsume[bytesRead:]
+        z, bytesRead = dataTypes.readDouble(toConsume)
+        toConsume = toConsume[bytesRead:]
+        flags, bytesRead = dataTypes.readByte(toConsume)
 
+        onGround = (flags & 0x01) == 0x01
+        pushingWall = (flags & 0x02) == 0x02
+
+        res = HandleResponse()
+        res.updatePosition = (x, feetY, z)
+        res.updateOnGround = onGround
+        res.updateAgainstWall = pushingWall
+        return res
 class MovePlayerPosRot_ServerBound(Packet):
     def __init__(self, data = bytearray(0)):
         super().__init__(0x1F, "move_player_pos_rot", data, "ServerBound", "PLAY")
@@ -244,7 +269,38 @@ class MovePlayerPosRot_ServerBound(Packet):
         res.updateOnGround = onGround
         res.updateAgainstWall = pushingWall
         return res
+class MovePlayerRot_ServerBound(Packet):
+    def __init__(self, data = bytearray(0)):
+        super().__init__(0x20, "move_player_rot", data, "ServerBound", "PLAY")
+    def handle(self):
+        toConsume = self.data
+        yaw, bytesRead = dataTypes.readFloat(toConsume)
+        toConsume = toConsume[bytesRead:]
+        pitch, bytesRead = dataTypes.readFloat(toConsume)
+        toConsume = toConsume[bytesRead:]
+        flags, bytesRead = dataTypes.readByte(toConsume)
 
+        onGround = (flags & 0x01) == 0x01
+        pushingWall = (flags & 0x02) == 0x02
+
+        res = HandleResponse()
+        res.updateRoation = (yaw, pitch)
+        res.updateOnGround = onGround
+        res.updateAgainstWall = pushingWall
+        return res
+
+
+"""Activities"""
+class Swing_ServerBound(Packet):
+    def __init__(self, data = bytearray(0)):
+        super().__init__(0x3F, "swing", data, "ServerBound", "PLAY")
+    def handle(self):
+        hand = dataTypes.readVarInt(self.data)[0]
+        isMainHand = (hand==0) # if false, used offhand
+        # TODO: I probably need to make the server tell everyone that this player has swung their hand
+
+
+"""Server setting stuff"""
 class ChangeDifficulty_ClientBound(Packet):
     def __init__(self, data = bytearray(0)):
         super().__init__(0xA, "change_difficulty", data, "ClientBound", "PLAY")
@@ -260,6 +316,41 @@ class SetHeldSlot_ClientBound(Packet):
 class PlayerInfoUpdate_ClientBound(Packet):
     def __init__(self, data = bytearray(0)):
         super().__init__(0x46, "player_info_update", data, "ClientBound", "PLAY")
+
+class InitializeBorder_ClientBound(Packet):
+    def __init__(self, data = bytearray(0)):
+        super().__init__(0x2b, "initialize_border", data, "ClientBound", "PLAY")
+
+class SetTime_ClientBound(Packet):
+    def __init__(self, data = bytearray(0)):
+        super().__init__(0x71, "set_time", data, "ClientBound", "PLAY")
+
+class GameEvent_ClientBound(Packet):
+    def __init__(self, data = bytearray(0)):
+        super().__init__(0x26, "game_event", data, "ClientBound", "PLAY")
+
+class TickingState_ClientBound(Packet):
+    def __init__(self, data = bytearray(0)):
+        super().__init__(0x7F, "ticking_state", data, "ClientBound", "PLAY")
+
+class SetChunkCacheCenter_ClientBound(Packet):
+    def __init__(self, data = bytearray(0)):
+        super().__init__(0x5E, "set_chunk_cache_center", data, "ClientBound", "PLAY")
+
+class LevelChunkWithLight_ClientBound(Packet):
+    def __init__(self, data = bytearray(0)):
+        super().__init__(0x2D, "level_chunk_with_light", data, "ClientBound", "PLAY")
+
+"""Misc"""
+class Ping_ClientBound(Packet):
+    def __init__(self, data = bytearray(0)):
+        super().__init__(0x3D, "ping", data, "ClientBound", "PLAY")
+class Pong_ServerBound(Packet):
+    def __init__(self, data = bytearray(0)):
+        super().__init__(0x2D, "pong", data, "ServerBound", "PLAY")
+    def handle(self):
+        pingId = dataTypes.readInt( self.data )[0]
+        return # nothing else to do
 
 
 # Extra classes
@@ -306,14 +397,23 @@ CONFIGURATION_PACKETS = [
     CustomPayload_ServerBound,
 ]
 PLAY_PACKETS = [
-    Login_ClientBound,
+    Login_ClientBound, PlayerLoaded_ServerBound, ClientTickEnd_ServerBound,
 
-    ClientTickEnd_ServerBound,
+    # position
     PlayerPosition_ClientBound, AcceptTeleportation_ServerBound,
-    MovePlayerPosRot_ServerBound,
-    ChangeDifficulty_ClientBound,
-    PlayerAbilities_ClientBound,
-    SetHeldSlot_ClientBound,
+    MovePlayerPosRot_ServerBound, MovePlayerPos_ServerBound, MovePlayerRot_ServerBound,
+
+    # Server setting stuff
+    PlayerAbilities_ClientBound, SetHeldSlot_ClientBound, PlayerInfoUpdate_ClientBound,
+    InitializeBorder_ClientBound, SetTime_ClientBound, ChangeDifficulty_ClientBound,
+    GameEvent_ClientBound,
+    SetChunkCacheCenter_ClientBound, LevelChunkWithLight_ClientBound,
+
+    # activities
+    Swing_ServerBound,
+
+    # misc
+    Ping_ClientBound, Pong_ServerBound,
 ]
 
 def decodePacket(data: bytes, connState: ConnectionState) -> tuple[bytes, Packet]:
@@ -353,7 +453,7 @@ def decodePacket(data: bytes, connState: ConnectionState) -> tuple[bytes, Packet
 
     if packet == None:
         packetId = "0x" + (hex(packetId).split("0x")[1]).zfill(2)
-        print(f"Unknown packet state and or id! {packetId=} {connState=}")
+        print(f"{textColors.RED}Unknown packet state and or id! {packetId=} {connState=}{textColors.RESET}")
 
     return (returnRemainingBytes, packet)
 
