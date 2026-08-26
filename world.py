@@ -228,18 +228,22 @@ class World:
         #tickingStatePacket = packets.TickingState_ClientBound(tickingStateData) # I have no idea why this fucks up the speed of the client's game, no matter the value I put. Im just gonan remove it for rn
 
         # set center chunk
+        playerChunkX = client.posX // 16
+        playerChunkZ = client.posZ // 16
+
         setChunkCenterData = bytes()
-        setChunkCenterData += dataTypes.writeVarInt( client.posX//16 ) # chunk x
-        setChunkCenterData += dataTypes.writeVarInt( client.posZ//16 ) # chunk z
+        setChunkCenterData += dataTypes.writeVarInt(playerChunkX) # chunk x
+        setChunkCenterData += dataTypes.writeVarInt(playerChunkZ) # chunk z
         setChunkCenterPacket = packets.SetChunkCacheCenter_ClientBound(setChunkCenterData)
 
 
 
         # chunk data & update light (1 for each chunk to load)
-        regionX = (client.posX//16) // 32
-        regionZ = (client.posZ//16) // 32
+        regionX = playerChunkX // 32
+        regionZ = playerChunkZ // 32
         regionFileName = f"./world/overworld/r.{regionX}.{regionZ}.mca"
         cls.loadRegionFile(regionFileName)
+        """
         chunkNbt = cls.regions[regionFileName].getChunkNBT( client.posX//16, client.posZ//16 )
         chunkHeightmaps: list[tuple[str, list[int]]] = []
         for key in chunkNbt["Heightmaps"]:
@@ -309,8 +313,9 @@ class World:
         chunkUpdateData += dataTypes.writeVarInt(0)
         chunkUpdateData += dataTypes.writeVarInt(0)
         chunkUpdateData += dataTypes.writeVarInt(0)
-
-        chunk: Chunk = cls.regions[regionFileName].getChunk(0, 0)
+        """
+        
+        chunk: Chunk = cls.regions[regionFileName].getChunk(playerChunkX%32, playerChunkZ%32) # mod32 to get it within the region file
         chunkUpdateData = chunk.getChunkPacketData()
         chunkUpdatePacket = packets.LevelChunkWithLight_ClientBound(chunkUpdateData)
 
@@ -324,8 +329,18 @@ class World:
             gameEventPacket,
             #tickingStatePacket,
             setChunkCenterPacket,
-            chunkUpdatePacket
+            #chunkUpdatePacket
         ])
+
+        chunkPackets = []
+        for x in range(0, 3):
+            for z in range(0, 3):
+                print(x, z)
+                chunk: Chunk = cls.regions[regionFileName].getChunk(x, z)
+                chunkUpdateData = chunk.getChunkPacketData()
+                chunkUpdatePacket = packets.LevelChunkWithLight_ClientBound(chunkUpdateData)
+                chunkPackets.append(chunkUpdatePacket)
+        client.queuedOutboundPackets.extend(chunkPackets)
 
     @classmethod
     def sendPacketToAllPlayers(cls, packet: packets.Packet):
@@ -347,13 +362,13 @@ class World:
             pingPacket = packets.Ping_ClientBound( dataTypes.writeInt(0) ) # 0 id for rn
             for plr in cls.players: plr.queuedOutboundPackets.append(pingPacket)
 
-        if cls.time % 20 == 0:
-            bid = ServerSettings.getRegistryData("minecraft:block", "minecraft:stone")
+        if cls.time % 5 == 0:
+            bid = ServerSettings.getRegistryData("minecraft:block", "minecraft:acacia_planks")
             bu = bytes()
-            bu += dataTypes.writePosition(0, 55, 0)
+            bu += dataTypes.writePosition(0, 64, 0)
             bu += dataTypes.writeVarInt(bid)
             buPacket = packets.BlockUpdate_ClientBound(bu)
-            #cls.sendPacketToAllPlayers(buPacket)
+            cls.sendPacketToAllPlayers(buPacket)
 
 
 

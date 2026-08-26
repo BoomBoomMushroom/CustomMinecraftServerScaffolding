@@ -25,6 +25,33 @@ class BytesWriter:
     def appendInt(self, v: int):
         self.data += bytes([v])
 
+# Bit Sets
+class BitSet:
+    def __init__(self, data: list[bool]=None):
+        # basically a big ol array of bits/bools
+        self.data: list[bool] = data
+        if self.data == None: self.data = []
+    def append(self, val: bool=False): self.data.append(val)
+    def pop(self) -> bool: return self.data.pop()
+    def __len__(self) -> int: return len(self.data)
+    def toLongArray(self) -> list[int]:
+        longArr = []
+        for _, bit in enumerate(self.data):
+            # 8 bits * 8 bytes = how many bits until we reset
+            if _ % (8*8) == 0: longArr.append(0)
+
+            if bit:
+                longArr[-1] |= 1 << (_%64)
+
+        return longArr
+
+def writeBitSet(bitSet: BitSet) -> bytes:
+    outBytes = bytes()
+    longs = bitSet.toLongArray()
+    outBytes += writeVarInt(len(longs))
+    for long in longs: outBytes += writeLong(long)
+    return outBytes
+
 # Var Ints
 def readVarInt(data: bytes) -> tuple[int, int]: # value, bytesRead
     reader = BytesReader(data)
@@ -47,7 +74,7 @@ def writeVarInt(value: int) -> bytes:
     writer.appendInt(value & 0xFF)
     return writer.data
 
-# VarLongs
+# Var Longs
 def readVarLong(data: bytes) -> tuple[int, int]:
     return readVarInt(data)
 
@@ -79,6 +106,26 @@ def writeByte(value: int) -> bytes:
 def readByte(value: int) -> tuple[int, int]:
     val = struct.unpack(">b", value)[0]
     return (val, 1)
+
+# prefixed byte array
+def writePrefixedByteArray(values: list[int]) -> bytes:
+    outBytes = bytes()
+    outBytes += writeVarInt(len(values))
+    for v in values: outBytes += writeByte(v)
+    return outBytes
+
+def writePrefixedUnsignedByteArray(values: list[int]) -> bytes:
+    outBytes = bytes()
+    outBytes += writeVarInt(len(values))
+    for v in values: outBytes += writeUnsignedByte(v)
+    return outBytes
+
+# prefixed raw data array
+def writePrefixedRawDataArray(values: list[bytes]) -> bytes:
+    outBytes = bytes()
+    outBytes += writeVarInt(len(values))
+    for v in values: outBytes += v
+    return outBytes
 
 # shorts
 def readUnsignedShort(data: bytes) -> tuple[int, int]:

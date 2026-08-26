@@ -20,10 +20,11 @@ class Region:
         self.calculateChunkDataOffsets()
 
     def calculateChunkDataOffsets(self):
-        for idx in range(0, 32*32): # x and z range from 0-31 (inclusive)
-            offsetInSectors = (self.payload[idx] << 16) + (self.payload[idx+1] << 8) + (self.payload[idx+2] << 0)
-            # lengthInSectors = self.payload[idx+3] # commented out since im not gonna use it rn
-            offsetBytes = offsetInSectors * 4096
+        for i in range(0, 32*32): # x and z range from 0-31 (inclusive)
+            index = i * 4 # 4 bytes per entry
+            offsetInSectors = (self.payload[index] << 16) | (self.payload[index+1] << 8) | (self.payload[index+2] << 0)
+            lengthInSectors = self.payload[index+3] # commented out since im not gonna use it rn
+            offsetBytes = offsetInSectors * (4 * 1024)
             self.chunkPositionOffsets.append(offsetBytes)
             self.chunks.append(None) # make sure to fill this up too so we can override it when we actaully read data
             self.chunkDataNBT.append(None) # make sure to fill this up too so we can override it when we actaully read data
@@ -32,7 +33,7 @@ class Region:
         if self.chunkDataNBT[index] != None: return self.chunkDataNBT[index]
 
         loc = self.chunkPositionOffsets[index]
-        lengthInBytes = (self.payload[loc] << 24) + (self.payload[loc+1] << 16) + (self.payload[loc+2] << 8) + (self.payload[loc+3] << 0)
+        lengthInBytes = (self.payload[loc] << 24) | (self.payload[loc+1] << 16) | (self.payload[loc+2] << 8) | (self.payload[loc+3] << 0)
         compressionType = self.payload[loc+4]
         chunkDataCompressed: bytes = self.payload[loc+5:loc+5+lengthInBytes-1] # compression type is counted in the length
         chunkData: bytes = bytes()
@@ -77,6 +78,14 @@ class Chunk:
         nbt = self.getNBT()
         x = nbt["xPos"]
         z = nbt["zPos"]
+        skyLightBitset = dataTypes.BitSet()
+        blockLightBitset = dataTypes.BitSet()
+        skyLightDatas = []
+        blockLightDatas = []
+
+        # these are for the section 1 below the world min height (1 section below our lowest section)
+        skyLightBitset.append(False)
+        blockLightBitset.append(False)
 
         packetData = bytes()
         packetData += dataTypes.writeInt(x) # chunk coord x
@@ -86,14 +95,19 @@ class Chunk:
         sectionsData = bytes()
         for sec in nbt["sections"]:
             yBottom = sec["Y"] * 16 # the start y level, add 16 to get the top y level
-            solidBlockCt = 16*16*16 # default if all stone
+            solidBlockCount = 16*16*16 # default if all stone
             allBlockId = ServerSettings.getRegistryData("minecraft:block", "minecraft:stone")
             if yBottom >= 60:
                 allBlockId = ServerSettings.getRegistryData("minecraft:block", "minecraft:air")
-                solidBlockCt = 0
+                solidBlockCount = 0
 
-            sectionsData += dataTypes.writeShort(solidBlockCt) # solid block count
-            sectionsData += dataTypes.writeShort(0) # fluid count, 0    
+            skyLightBitset.append(True)
+            skyLightDatas.append([0b1111_1111] * 2048) # 0b1111_1111 | for (16*16*16)/2 so 4 bits per block
+            blockLightBitset.append(True)
+            blockLightDatas.append([0b1111_1111] * 2048)
+
+            sectionsData += dataTypes.writeShort(solidBlockCount) # solid block count
+            sectionsData += dataTypes.writeShort(0) # fluid count, 0
             # block data paletted
             sectionsData += dataTypes.writeUnsignedByte(0) # bits per entry
             sectionsData += dataTypes.writeVarInt(allBlockId) # block id
@@ -105,14 +119,21 @@ class Chunk:
         packetData += dataTypes.writeVarInt(len(sectionsData))
         packetData += sectionsData
 
+        # these are for the section 1 above the world max height (1 section above our highest section)
+        skyLightBitset.append(False)
+        blockLightBitset.append(False)
+
+        skyLightDatasRaw = [ dataTypes.writePrefixedUnsignedByteArray(arr) for arr in skyLightDatas ]
+        blockLightDatasRaw = [ dataTypes.writePrefixedUnsignedByteArray(arr) for arr in blockLightDatas ]
+
         packetData += dataTypes.writeVarInt(0) # 0 block entities
         # light data vv
-        packetData += dataTypes.writeVarInt(0) # bitset size of 0
-        packetData += dataTypes.writeVarInt(0) # bitset size of 0
-        packetData += dataTypes.writeVarInt(0) # bitset size of 0
-        packetData += dataTypes.writeVarInt(0) # bitset size of 0
-        packetData += dataTypes.writeVarInt(0) # 0 light arr
-        packetData += dataTypes.writeVarInt(0) # 0 light arr
+        packetData += dataTypes.writeBitSet(skyLightBitset) # sky light bitset
+        packetData += dataTypes.writeBitSet(blockLightBitset) # block light bitset
+        packetData += dataTypes.writeBitSet(dataTypes.BitSet()) # bitset of empty sky light
+        packetData += dataTypes.writeBitSet(dataTypes.BitSet()) # bitset of empty block light
+        packetData += dataTypes.writePrefixedRawDataArray(skyLightDatasRaw) # sky light data arr
+        packetData += dataTypes.writePrefixedRawDataArray(blockLightDatasRaw) # block light data arr
         return packetData
 
 """
@@ -191,6 +212,6 @@ class Chunk:
 if __name__ == "__main__":
     r = Region("./world/overworld/r.0.0.mca")
     c = r.getChunk(0, 0)
-    print(c.getNBT().keys())
+    #print(c.getNBT().keys())
     c.getChunkPacketData()
 
