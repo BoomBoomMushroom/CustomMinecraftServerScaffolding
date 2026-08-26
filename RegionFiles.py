@@ -96,9 +96,9 @@ class Chunk:
         for sec in nbt["sections"]:
             yBottom = sec["Y"] * 16 # the start y level, add 16 to get the top y level
             solidBlockCount = 16*16*16 # default if all stone
-            allBlockId = ServerSettings.getRegistryData("minecraft:block", "minecraft:stone")
+            allBlockId = ServerSettings.getBlockStateId("minecraft:stone", {})
             if yBottom >= 60:
-                allBlockId = ServerSettings.getRegistryData("minecraft:block", "minecraft:air")
+                allBlockId = ServerSettings.getBlockStateId("minecraft:air", {})
                 solidBlockCount = 0
 
             skyLightBitset.append(True)

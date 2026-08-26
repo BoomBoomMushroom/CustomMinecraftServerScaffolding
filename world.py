@@ -363,12 +363,12 @@ class World:
             for plr in cls.players: plr.queuedOutboundPackets.append(pingPacket)
 
         if cls.time % 5 == 0:
-            bid = ServerSettings.getRegistryData("minecraft:block", "minecraft:acacia_planks")
+            bid = ServerSettings.getRegistryData("minecraft:block", "minecraft:stone")
             bu = bytes()
-            bu += dataTypes.writePosition(0, 64, 0)
+            bu += dataTypes.writePosition(18, 64, 18)
             bu += dataTypes.writeVarInt(bid)
             buPacket = packets.BlockUpdate_ClientBound(bu)
-            cls.sendPacketToAllPlayers(buPacket)
+            #cls.sendPacketToAllPlayers(buPacket)
 
 
 
