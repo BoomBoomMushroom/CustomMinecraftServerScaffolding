@@ -48,7 +48,8 @@ class Client:
         self.playerPropertiesFromAPI: list[dict[str, str]] = [] # list of properties from the mojang api for our player. eg textures & capes
 
         # Special numbers that can tick up, keep track of these
-        self.playerEntityId: int = dataTypes.readInt(random.randbytes(4))[0] # ramdom 4 byte EID
+        #self.playerEntityId: int = dataTypes.readInt(random.randbytes(4))[0] # ramdom 4 byte EID
+        self.playerEntityId: int = World.allocateEntityId()
         self.teleportId: int = random.randint(1, 999)
 
         self.registries: dict[str, list[int]] = {}
@@ -84,7 +85,9 @@ class Client:
 
         # client todo stuff
         if packetResponse.sendLoginFinishedPacket == True: self.sendLoginFinishedPacket()
-        if packetResponse.generateAndSendRegistryData == True: self.generateAndSendRegistryData()
+        if packetResponse.generateAndSendRegistryData == True:
+            self.generateAndSendConfigData()
+            self.generateAndSendRegistryData()
         if packetResponse.clientLoginToWorld == True: World.onPlayerJoin(self)
 
         # info from packets to know stuff happened
@@ -139,6 +142,30 @@ class Client:
         packetData += bytes(16) # Session ID (as a UUID) | I don't think it really matters so im making it all 0s for right now
 
         self.queuedOutboundPackets.append(packets.LoginFinished_ClientBound(packetData))
+
+    def generateAndSendConfigData(self):
+        brandPluginMessageData = bytes()
+        brandPluginMessageData += dataTypes.writeIdentifier("minecraft:brand")
+        brandPluginMessageData += dataTypes.writeString(ServerSettings.serverBrand)
+        brandPluginMessagePacket = packets.CustomPayload_ClientBound(brandPluginMessageData)
+
+        featureFlagsData = bytes()
+        featureFlagsData += dataTypes.writeVarInt(1) # how many identifiers after this?
+        featureFlagsData += dataTypes.writeIdentifier("minecraft:vanilla")
+        featureFlagsPacket = packets.UpdateEnabledFeatures_ClientBound(featureFlagsData)
+
+        knownDatapacksData = bytes()
+        knownDatapacksData += dataTypes.writeVarInt(1) # how many datapacks?
+        knownDatapacksData += dataTypes.writeString("minecraft") # namespace
+        knownDatapacksData += dataTypes.writeString("core") # pathname
+        knownDatapacksData += dataTypes.writeString(ServerSettings.version) # version of the pack
+        knownDatapacksPacket = packets.SelectKnownPacks_ClientBound(knownDatapacksData)
+
+
+        self.queuedOutboundPackets.extend([
+            brandPluginMessagePacket, featureFlagsPacket, knownDatapacksPacket
+        ])
+
 
     def generateAndSendRegistryData(self):
         """

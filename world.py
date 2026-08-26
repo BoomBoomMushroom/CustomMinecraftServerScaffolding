@@ -6,7 +6,7 @@ import dataTypes
 from ServerSettings import ServerSettings
 import packets
 from enumValues import *
-from RegionFiles import Region
+from RegionFiles import Region, Chunk
 if TYPE_CHECKING: from client import Client # import only for type checking
 
 
@@ -29,7 +29,14 @@ class World:
     tickRate: float = 20 # 20 tps
     isTickFrozen: bool = False
 
-    worldName: f"world"
+    worldName: str = "world"
+
+    nextEntityId: int = 1
+    @classmethod
+    def allocateEntityId(cls) -> int:
+        eid = cls.nextEntityId
+        cls.nextEntityId += 1
+        return eid
 
     @classmethod
     def loadRegionFile(cls, fileName: str, overwrite: bool = False):
@@ -101,6 +108,10 @@ class World:
         # update recipes packet
         
         # entity event packet | for the OP permission level
+        entityEventData = bytes()
+        entityEventData += dataTypes.writeInt( client.playerEntityId ) # Entity ID
+        entityEventData += dataTypes.writeByte(28) # 24->28 = op level 0->4 respectivly
+        entityEventPacket = packets.EntityEvent_ClientBound(entityEventData)
 
         # commands packet
         
@@ -197,7 +208,12 @@ class World:
         # TODO, check sending the time at 24000+ to see if the client handles it and auto modulos it or if we have to in the varlong
         
         # set default spawn location (optional, "home" spawn,,, not where client will spawn in)
-            # ill do this later when i make a dataTypes.writePosition function
+        defaultSpawnData = bytes()
+        defaultSpawnData += dataTypes.writeIdentifier("minecraft:overworld") # dimension
+        defaultSpawnData += dataTypes.writePosition(0, 60, 0) # pos
+        defaultSpawnData += dataTypes.writeFloat(0) # yaw
+        defaultSpawnData += dataTypes.writeFloat(0) # pitch
+        defaultSpawnPacket = packets.SetDefaultSpawnPosition_ClientBound(defaultSpawnData)
 
         # game event (for telling the client to wait for chunks)
         gameEventData = bytes()
@@ -239,10 +255,10 @@ class World:
 
         chunkUpdateData += dataTypes.writeVarInt(len(chunkHeightmaps)) # length of heightmap array
         for hmap in chunkHeightmaps:
-            dataTypes.writeVarInt( HEIGHTMAP_TYPE_Enum[hmap[0]] ) # type of heightmap
-            dataTypes.writeVarInt(len(hmap[1])) # length of long array
-            for long in hmap[1]: dataTypes.writeLong(long) # the longs IN the array
-            
+            chunkUpdateData += dataTypes.writeVarInt( HEIGHTMAP_TYPE_Enum[hmap[0]] ) # type of heightmap
+            chunkUpdateData += dataTypes.writeVarInt(len(hmap[1])) # length of long array
+            for long in hmap[1]: chunkUpdateData += dataTypes.writeLong(long) # the longs IN the array
+        
         for _,section in enumerate(chunkNbt["sections"]):
             # TODO: maybe make this accurately reflect what it should be? who knows
             chunkUpdateData += dataTypes.writeShort(1) # block count (client keeps tracks of block places and breaks, and if the count hits 0 the chunk stops being rendered)
@@ -294,19 +310,26 @@ class World:
         chunkUpdateData += dataTypes.writeVarInt(0)
         chunkUpdateData += dataTypes.writeVarInt(0)
 
+        chunk: Chunk = cls.regions[regionFileName].getChunk(0, 0)
+        chunkUpdateData = chunk.getChunkPacketData()
         chunkUpdatePacket = packets.LevelChunkWithLight_ClientBound(chunkUpdateData)
 
 
         client.queuedOutboundPackets.extend([
             playPacket,
             changeDiffPacket, playerAbilitiesPacket, heldSlotPacket,
+            entityEventPacket,
             ppcb,
-            piuPacket, initWBPacket, setTimePacket, gameEventPacket,
+            piuPacket, initWBPacket, setTimePacket, defaultSpawnPacket,
+            gameEventPacket,
             #tickingStatePacket,
             setChunkCenterPacket,
-            #chunkUpdatePacket
+            chunkUpdatePacket
         ])
 
+    @classmethod
+    def sendPacketToAllPlayers(cls, packet: packets.Packet):
+        for p in cls.players: p.queuedOutboundPackets.append(packet)
 
     @classmethod
     def run(cls):
@@ -323,6 +346,15 @@ class World:
         if cls.time % (5*cls.tickRate) == 0:
             pingPacket = packets.Ping_ClientBound( dataTypes.writeInt(0) ) # 0 id for rn
             for plr in cls.players: plr.queuedOutboundPackets.append(pingPacket)
+
+        if cls.time % 20 == 0:
+            bid = ServerSettings.getRegistryData("minecraft:block", "minecraft:stone")
+            bu = bytes()
+            bu += dataTypes.writePosition(0, 55, 0)
+            bu += dataTypes.writeVarInt(bid)
+            buPacket = packets.BlockUpdate_ClientBound(bu)
+            #cls.sendPacketToAllPlayers(buPacket)
+
 
 
         

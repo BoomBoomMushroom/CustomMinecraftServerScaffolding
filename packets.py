@@ -193,6 +193,16 @@ class CustomPayload_ServerBound(Packet):
 
         # ehh idk how to really handle this and it really doesn't matter so im gonna ignore this
         return None
+class CustomPayload_ClientBound(Packet):
+    def __init__(self, data = bytearray(0)):
+        super().__init__(0x1, "custom_payload", data, "ServerBound", "CONFIGURATION")
+
+class UpdateEnabledFeatures_ClientBound(Packet):
+    def __init__(self, data = bytearray(0)):
+        super().__init__(0xC, "update_enabled_features", data, "ClientBound", "CONFIGURATION")
+class SelectKnownPacks_ClientBound(Packet):
+    def __init__(self, data = bytearray(0)):
+        super().__init__(0xE, "select_known_packs", data, "ClientBound", "CONFIGURATION")
 
 # Play packets
 class Login_ClientBound(Packet):
@@ -288,7 +298,19 @@ class MovePlayerRot_ServerBound(Packet):
         res.updateOnGround = onGround
         res.updateAgainstWall = pushingWall
         return res
+class MovePlayerStatusOnly_ServerBound(Packet):
+    def __init__(self, data = bytearray(0)):
+        super().__init__(0x21, "move_player_status_only", data, "ServerBound", "PLAY")
+    def handle(self):
+        flags, bytesRead = dataTypes.readByte(self.data)
 
+        onGround = (flags & 0x01) == 0x01
+        pushingWall = (flags & 0x02) == 0x02
+
+        res = HandleResponse()
+        res.updateOnGround = onGround
+        res.updateAgainstWall = pushingWall
+        return res
 
 """Activities"""
 class Swing_ServerBound(Packet):
@@ -299,6 +321,10 @@ class Swing_ServerBound(Packet):
         isMainHand = (hand==0) # if false, used offhand
         # TODO: I probably need to make the server tell everyone that this player has swung their hand
 
+"""Updates"""
+class BlockUpdate_ClientBound(Packet):
+    def __init__(self, data = bytearray(0)):
+        super().__init__(0x8, "block_update", data, "ClientBound", "PLAY")
 
 """Server setting stuff"""
 class ChangeDifficulty_ClientBound(Packet):
@@ -340,6 +366,15 @@ class SetChunkCacheCenter_ClientBound(Packet):
 class LevelChunkWithLight_ClientBound(Packet):
     def __init__(self, data = bytearray(0)):
         super().__init__(0x2D, "level_chunk_with_light", data, "ClientBound", "PLAY")
+
+class SetDefaultSpawnPosition_ClientBound(Packet):
+    def __init__(self, data = bytearray(0)):
+        super().__init__(0x61, "set_default_spawn_position", data, "ClientBound", "PLAY")
+
+"""Entities"""
+class EntityEvent_ClientBound(Packet):
+    def __init__(self, data = bytearray(0)):
+        super().__init__(0x22, "entity_event", data, "ClientBound", "PLAY")
 
 """Misc"""
 class Ping_ClientBound(Packet):
@@ -394,14 +429,15 @@ CONFIGURATION_PACKETS = [
     RegistryData_ClientBound,
     FinishConfiguration_ClientBound, FinishConfiguration_ServerBound,
     UpdateTags_ClientBound,
-    CustomPayload_ServerBound,
+    CustomPayload_ServerBound, CustomPayload_ClientBound,
+    UpdateEnabledFeatures_ClientBound, SelectKnownPacks_ClientBound,
 ]
 PLAY_PACKETS = [
     Login_ClientBound, PlayerLoaded_ServerBound, ClientTickEnd_ServerBound,
 
     # position
     PlayerPosition_ClientBound, AcceptTeleportation_ServerBound,
-    MovePlayerPosRot_ServerBound, MovePlayerPos_ServerBound, MovePlayerRot_ServerBound,
+    MovePlayerPosRot_ServerBound, MovePlayerPos_ServerBound, MovePlayerRot_ServerBound, MovePlayerStatusOnly_ServerBound,
 
     # Server setting stuff
     PlayerAbilities_ClientBound, SetHeldSlot_ClientBound, PlayerInfoUpdate_ClientBound,

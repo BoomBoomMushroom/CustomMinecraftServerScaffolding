@@ -6,6 +6,7 @@ class ServerSettings:
     version = "26.2"
     protocol = 776
     gameRules: GameRules = GameRules
+    serverBrand: str = "CustomMCServerScaffolding" # default is "vanilla"
 
     maxPlayers: int = 20
     playersOnline: int = 0

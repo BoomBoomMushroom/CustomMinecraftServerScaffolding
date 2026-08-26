@@ -72,56 +72,56 @@ def writeString(toWrite: str) -> bytes:
 
 # bytes
 def writeUnsignedByte(value: int) -> bytes:
-    return struct.pack("B", value)
+    return struct.pack(">B", value)
 def writeByte(value: int) -> bytes:
-    return struct.pack("b", value)
+    return struct.pack(">b", value)
 
 def readByte(value: int) -> tuple[int, int]:
-    val = struct.unpack("b", value)[0]
+    val = struct.unpack(">b", value)[0]
     return (val, 1)
 
 # shorts
 def readUnsignedShort(data: bytes) -> tuple[int, int]:
-    val = struct.unpack('H', data[0:2])[0]
+    val = struct.unpack('>H', data[0:2])[0]
     return (val, 2)
 
 def writeUnsignedShort(value: int) -> bytes:
-    data = struct.pack('H', value)
+    data = struct.pack('>H', value)
     return data
 
 def readShort(data: bytes) -> tuple[int, int]:
-    val = struct.unpack('h', data[0:2])[0]
+    val = struct.unpack('>h', data[0:2])[0]
     return (val, 2)
 
 def writeShort(value: int) -> bytes:
-    data = struct.pack('h', value)
+    data = struct.pack('>h', value)
     return data
 
 # ints
 def readInt(data: bytes) -> tuple[int, int]:
-    val = struct.unpack('i', data[0:4])[0]
+    val = struct.unpack('>i', data[0:4])[0]
     return (val, 4)
 def writeInt(val: int) -> bytes:
-    return struct.pack('i', val)
+    return struct.pack('>i', val)
 
 # longs
 def writeLong(value: int) -> bytes:
-    return struct.pack("q", value)
+    return struct.pack(">q", value)
 
 # floats
 def writeFloat(value: float) -> bytes:
-    return struct.pack("f", value)
+    return struct.pack(">f", value)
 
 def readFloat(data: bytes) -> tuple[float, int]:
-    val = struct.unpack("f", data[0:4])[0]
+    val = struct.unpack(">f", data[0:4])[0]
     return (val, 4)
 
 # doubles
 def writeDouble(value: float) -> bytes:
-    return struct.pack("d", value)
+    return struct.pack(">d", value)
 
 def readDouble(data: bytes) -> tuple[float, int]:
-    val = struct.unpack("d", data[0:8])[0]
+    val = struct.unpack(">d", data[0:8])[0]
     return (val, 8)
 
 
@@ -149,6 +149,13 @@ def writeIdentifier(identifier: str) -> bytes:
     readIdentifier(b) # if it is an invalid identifier it will raise an exception in here
     return b
 
+# Positions
+
+def writePosition(x: int, y: int, z: int) -> bytes:
+    x <<= (12+26) # 12 for y, 26 for z
+    y <<= 26 # 26 for z
+    n = x | y | z # bit old 8 byete number (26+12+26=64 bits)
+    return struct.pack('>q', n)
 
 
 def reverseBits(value: int, bits: int=8) -> int:
