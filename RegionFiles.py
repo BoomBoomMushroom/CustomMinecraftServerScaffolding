@@ -66,10 +66,16 @@ class Region:
 
     # TODO: have the ability to modify the chunks and maybe save the region file back again
 
+
+# TODO: btw the caching of the chunk is done baed on the first player that loads it,
+#   this shouldn't be a major issue if all of the player's synced registries are the same
+#   from our sender. (I think it does right now)
+
 class Chunk:
     def __init__(self, dataBytes):
         self.data = dataBytes
         self.nbt: nbtlib.File = None
+        self.cachedPacketData: bytes = None
 
     def getNBT(self) -> nbtlib.File:
         if self.nbt != None: return self.nbt
@@ -143,7 +149,16 @@ class Chunk:
         return packetData
 
     def getChunkPacketData(self, registryReferenceClient: Client=None) -> bytes:
+        if self.cachedPacketData != None:
+            #print("I'm cached :D sending that back")
+            return self.cachedPacketData
+
         nbt = self.getNBT()
+        chunkStatus = nbt["Status"]
+        if chunkStatus != "minecraft:full":
+            # chunk is still generating in some way, it is not done,,, ignore it
+            return bytes()
+
         x = nbt["xPos"]
         z = nbt["zPos"]
 
@@ -246,6 +261,8 @@ class Chunk:
         packetData += dataTypes.writeBitSet(dataTypes.BitSet()) # bitset of empty block light
         packetData += dataTypes.writePrefixedRawDataArray(skyLightDatasRaw) # sky light data arr
         packetData += dataTypes.writePrefixedRawDataArray(blockLightDatasRaw) # block light data arr
+
+        self.cachedPacketData = packetData
         return packetData
 
 
