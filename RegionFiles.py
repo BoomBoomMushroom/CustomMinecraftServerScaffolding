@@ -50,6 +50,9 @@ class Region:
         return chunkData
 
     def getChunk(self, x: int, z: int) -> Chunk:
+        # mod x and z to make sure they stay within our bounds (0-31 inclusive)
+        x %= 32
+        z %= 32
         idx = x + 32*z
         if self.chunks[idx] != None: return self.chunks[idx]
         dataBytes = self.getChunkBytesFromIndex(idx)
@@ -172,8 +175,8 @@ class Chunk:
 
         sectionsData = bytes()
         for sec in nbt["sections"]:
-            solidBlockCount = (16*16*16) # all blocks in the section are "filled"; so the chunk still rendered w/o counting up everything
-            fluidBlockCount = 0
+            solidBlockCount = 16*16*16 # all blocks in the section are "filled"; so the chunk still rendered w/o counting up everything
+            fluidBlockCount = 16*16*16
 
             def getPaletteEntryId(entry: dict|str, isBiome: bool=False) -> int:
                 id = 0

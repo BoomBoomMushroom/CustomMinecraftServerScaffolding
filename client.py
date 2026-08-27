@@ -34,7 +34,7 @@ class Client:
         self.username = ""
         self.UUID = None
         self.posX: float = 0
-        self.posY: float = 70
+        self.posY: float = 80
         self.posZ: float = 0
         self.velX: float = 0
         self.velY: float = 0

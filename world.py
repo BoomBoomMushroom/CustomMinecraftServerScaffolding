@@ -1,6 +1,7 @@
 import time
 from typing import Literal, TYPE_CHECKING
 import math
+import threading
 
 import dataTypes
 from ServerSettings import ServerSettings
@@ -18,8 +19,8 @@ class World:
 
     seed: int = 0
     time: int = 0 # time in ticks, time % 24000 -> 0=sunrise, 6000=noon, 12000=sunset, and 18000=midnight
-    renderDistance: int = 32
-    simulationDistance: int = 16 
+    renderDistance: int = 16
+    simulationDistance: int = 8 
     difficulty: DIFFICULTY = "PEACEFUL"
     difficultyLocked: bool = False
     defaultGameMode: GAMEMODE = "SURVIVAL"
@@ -45,6 +46,25 @@ class World:
             cls.regions[fileName] = Region(fileName)
         else:
             pass # will not overwrite already opened region file, consider closing it first (need to make that function)
+
+    @classmethod
+    def loadRegionFileFromChunkCoords(cls, chunkX: int, chunkZ: int, overwrite: bool=False):
+        regionX = chunkX // 32
+        regionZ = chunkZ // 32
+        regionFileName = f"./world/overworld/r.{regionX}.{regionZ}.mca"
+        cls.loadRegionFile(regionFileName, overwrite)
+
+    @classmethod
+    def getRegion(cls, fileName: str) -> Region:
+        return cls.regions.get(fileName, None)
+
+    @classmethod
+    def getRegionFromChunkCoords(cls, chunkX: int, chunkZ: int) -> Region:
+        regionX = chunkX // 32
+        regionZ = chunkZ // 32
+        regionFileName = f"./world/overworld/r.{regionX}.{regionZ}.mca"
+        return cls.getRegion(regionFileName)
+    
 
     @classmethod
     def onPlayerJoin(cls, client: Client):
@@ -236,89 +256,9 @@ class World:
         setChunkCenterData += dataTypes.writeVarInt(playerChunkZ) # chunk z
         setChunkCenterPacket = packets.SetChunkCacheCenter_ClientBound(setChunkCenterData)
 
-
-
-        # chunk data & update light (1 for each chunk to load)
-        regionX = playerChunkX // 32
-        regionZ = playerChunkZ // 32
-        regionFileName = f"./world/overworld/r.{regionX}.{regionZ}.mca"
-        cls.loadRegionFile(regionFileName)
-        """
-        chunkNbt = cls.regions[regionFileName].getChunkNBT( client.posX//16, client.posZ//16 )
-        chunkHeightmaps: list[tuple[str, list[int]]] = []
-        for key in chunkNbt["Heightmaps"]:
-            # these keys below are the only ones the wiki displays w/ it's id so the only ones im sending
-            if key not in ["WORLD_SURFACE", "MOTION_BLOCKING", "MOTION_BLOCKING_NO_LEAVES"]: continue
-            hmap = chunkNbt["Heightmaps"][key]
-            chunkHeightmaps.append((key, hmap))
-
-        
-        chunkUpdateData = bytes()
-        chunkUpdateData += dataTypes.writeInt(client.posX//16) # chunk x
-        chunkUpdateData += dataTypes.writeInt(client.posZ//16) # chunk z
-
-        chunkUpdateData += dataTypes.writeVarInt(len(chunkHeightmaps)) # length of heightmap array
-        for hmap in chunkHeightmaps:
-            chunkUpdateData += dataTypes.writeVarInt( HEIGHTMAP_TYPE_Enum[hmap[0]] ) # type of heightmap
-            chunkUpdateData += dataTypes.writeVarInt(len(hmap[1])) # length of long array
-            for long in hmap[1]: chunkUpdateData += dataTypes.writeLong(long) # the longs IN the array
-        
-        for _,section in enumerate(chunkNbt["sections"]):
-            # TODO: maybe make this accurately reflect what it should be? who knows
-            chunkUpdateData += dataTypes.writeShort(1) # block count (client keeps tracks of block places and breaks, and if the count hits 0 the chunk stops being rendered)
-            chunkUpdateData += dataTypes.writeShort(0) # fluid count
-            
-
-            def writePalettedContainer(
-                    refName:str, namespace:str, isStaticReg:bool, needToUseNameProperty:bool=False,
-                    minBits:int=4, maxBits:int=8,
-                ):
-                containerBytes = bytes()
-                palette = section[refName]["palette"]
-                bitsMin = math.floor(math.log2(len(palette)))
-                chunkUpdatesBitsPerBlock = min(max(bitsMin,minBits),maxBits)
-
-                getRegFunc = None
-                if isStaticReg: getRegFunc = ServerSettings.getRegistryData
-                else: getRegFunc = client.getRegistryData
-
-                # if 0 then it is all one block and we just say that
-                if bitsMin == 0:
-                    containerBytes += dataTypes.writeUnsignedByte(0) # bits per entry, 0=single valued
-                    paletteItemName = palette[0]
-                    if needToUseNameProperty: paletteItemName = paletteItemName["Name"]
-                    containerBytes += dataTypes.writeVarInt( getRegFunc(namespace, str(paletteItemName)) )
-                else:
-                    # Copy and paste the palette and the blocks list into the packet
-                    containerBytes += dataTypes.writeUnsignedByte(chunkUpdatesBitsPerBlock) # bits per entry
-                    containerBytes += dataTypes.writeVarInt(len(palette))
-                    for paletteItem in palette:
-                        if needToUseNameProperty: paletteItem = paletteItem["Name"]
-                        blockNum = getRegFunc(namespace, str(paletteItem))
-                        containerBytes += dataTypes.writeVarInt(blockNum)
-
-                    blocks = section["block_states"]["data"]
-                    for long in blocks: containerBytes += dataTypes.writeLong(long)
-
-                return containerBytes
-
-            chunkUpdateData += writePalettedContainer("block_states", "minecraft:block", isStaticReg=True, needToUseNameProperty=True)
-            chunkUpdateData += writePalettedContainer("biomes", "minecraft:worldgen/biome", isStaticReg=False, minBits=1, maxBits=3)
-         
-        chunkUpdateData += dataTypes.writeVarInt(0) # we're not gonna send block entities here
-        # temp light data of all 0s
-        chunkUpdateData += dataTypes.writeVarInt(0)
-        chunkUpdateData += dataTypes.writeVarInt(0)
-        chunkUpdateData += dataTypes.writeVarInt(0)
-        chunkUpdateData += dataTypes.writeVarInt(0)
-        chunkUpdateData += dataTypes.writeVarInt(0)
-        chunkUpdateData += dataTypes.writeVarInt(0)
-        """
-        
-        chunk: Chunk = cls.regions[regionFileName].getChunk(playerChunkX%32, playerChunkZ%32) # mod32 to get it within the region file
-        chunkUpdateData = chunk.getChunkPacketData()
-        chunkUpdatePacket = packets.LevelChunkWithLight_ClientBound(chunkUpdateData)
-
+        # send chunks to player
+        chunkSendThread = threading.Thread(target=cls.sendChunksInView, args=(client,), daemon=True)
+        chunkSendThread.start()
 
         client.queuedOutboundPackets.extend([
             playPacket,
@@ -328,18 +268,32 @@ class World:
             piuPacket, initWBPacket, setTimePacket, defaultSpawnPacket,
             gameEventPacket,
             #tickingStatePacket,
-            setChunkCenterPacket,
-            #chunkUpdatePacket
+            setChunkCenterPacket
         ])
 
-        chunkPackets = []
-        for x in range(0, 5):
-            for z in range(0, 5):
-                chunk: Chunk = cls.regions[regionFileName].getChunk(x, z)
+    @classmethod
+    def sendChunksInView(cls, client: Client):
+        playerChunkX = client.posX // 16
+        playerChunkZ = client.posZ // 16
+
+        halfRenderDist = cls.renderDistance//2
+
+        def sendAllZ(client: Client, xVal: int):
+            for z in range(-halfRenderDist, halfRenderDist):
+                chunkX = playerChunkX + xVal
+                chunkZ = playerChunkZ + z
+                cls.loadRegionFileFromChunkCoords(chunkX, chunkZ)
+                region: Region = cls.getRegionFromChunkCoords(chunkX, chunkZ)
+
+                chunk: Chunk = region.getChunk(chunkX, chunkZ)
                 chunkUpdateData = chunk.getChunkPacketData(client)
                 chunkUpdatePacket = packets.LevelChunkWithLight_ClientBound(chunkUpdateData)
-                chunkPackets.append(chunkUpdatePacket)
-        client.queuedOutboundPackets.extend(chunkPackets)
+                client.queuedOutboundPackets.append(chunkUpdatePacket)
+
+        for x in range(-halfRenderDist, halfRenderDist):
+            threadX = threading.Thread(target=sendAllZ, args=(client,x), daemon=True)
+            threadX.start()
+            #sendAllZ(client, x)
 
     @classmethod
     def sendPacketToAllPlayers(cls, packet: packets.Packet):
