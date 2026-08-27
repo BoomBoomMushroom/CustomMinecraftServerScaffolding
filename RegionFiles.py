@@ -1,11 +1,12 @@
-import dataTypes
-from ServerSettings import ServerSettings
-from enumValues import *
-
 import nbtlib
 import zlib
 import io
-import math
+from typing import Literal, TYPE_CHECKING
+
+import dataTypes
+from ServerSettings import ServerSettings
+from enumValues import *
+if TYPE_CHECKING: from client import Client # import only for type checking
 
 class Region:
     def __init__(self, regionFilePath: str):
@@ -138,7 +139,7 @@ class Chunk:
         packetData += dataTypes.writePrefixedRawDataArray(blockLightDatasRaw) # block light data arr
         return packetData
 
-    def getChunkPacketData(self) -> bytes:
+    def getChunkPacketData(self, registryReferenceClient: Client=None) -> bytes:
         nbt = self.getNBT()
         x = nbt["xPos"]
         z = nbt["zPos"]
@@ -174,10 +175,11 @@ class Chunk:
             solidBlockCount = (16*16*16) # all blocks in the section are "filled"; so the chunk still rendered w/o counting up everything
             fluidBlockCount = 0
 
-            def getPaletteEntryId(entry: dict, isBiome: bool=False) -> int:
+            def getPaletteEntryId(entry: dict|str, isBiome: bool=False) -> int:
                 id = 0
                 if isBiome:
-                    pass # todo fix this because I need a client for the synced registry entry
+                    if registryReferenceClient == None: return id
+                    id = registryReferenceClient.getRegistryData("minecraft:worldgen/biome", entry)
                 else:
                     # block state palette
                     identifier = entry["Name"]

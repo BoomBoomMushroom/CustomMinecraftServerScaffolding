@@ -336,7 +336,7 @@ class World:
         for x in range(0, 5):
             for z in range(0, 5):
                 chunk: Chunk = cls.regions[regionFileName].getChunk(x, z)
-                chunkUpdateData = chunk.getChunkPacketData()
+                chunkUpdateData = chunk.getChunkPacketData(client)
                 chunkUpdatePacket = packets.LevelChunkWithLight_ClientBound(chunkUpdateData)
                 chunkPackets.append(chunkUpdatePacket)
         client.queuedOutboundPackets.extend(chunkPackets)
