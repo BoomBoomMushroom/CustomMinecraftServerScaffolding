@@ -1,9 +1,11 @@
 import dataTypes
 from ServerSettings import ServerSettings
+from enumValues import *
 
 import nbtlib
 import zlib
 import io
+import math
 
 class Region:
     def __init__(self, regionFilePath: str):
@@ -74,7 +76,7 @@ class Chunk:
         self.nbt = nbtlib.File.parse(nbtBytesIO)
         return self.nbt
 
-    def getChunkPacketData(self) -> bytes:
+    def getChunkPacketDummyData(self) -> bytes:
         nbt = self.getNBT()
         x = nbt["xPos"]
         z = nbt["zPos"]
@@ -136,82 +138,116 @@ class Chunk:
         packetData += dataTypes.writePrefixedRawDataArray(blockLightDatasRaw) # block light data arr
         return packetData
 
-"""
-        chunkNbt = cls.regions[regionFileName].getChunkNBT( client.posX//16, client.posZ//16 )
+    def getChunkPacketData(self) -> bytes:
+        nbt = self.getNBT()
+        x = nbt["xPos"]
+        z = nbt["zPos"]
+
         chunkHeightmaps: list[tuple[str, list[int]]] = []
-        for key in chunkNbt["Heightmaps"]:
+        for key in nbt["Heightmaps"]:
             # these keys below are the only ones the wiki displays w/ it's id so the only ones im sending
             if key not in ["WORLD_SURFACE", "MOTION_BLOCKING", "MOTION_BLOCKING_NO_LEAVES"]: continue
-            hmap = chunkNbt["Heightmaps"][key]
+            hmap = nbt["Heightmaps"][key]
             chunkHeightmaps.append((key, hmap))
 
-        
-        chunkUpdateData = bytes()
-        chunkUpdateData += dataTypes.writeInt(client.posX//16) # chunk x
-        chunkUpdateData += dataTypes.writeInt(client.posZ//16) # chunk z
+        skyLightBitset = dataTypes.BitSet()
+        blockLightBitset = dataTypes.BitSet()
+        skyLightDatas = []
+        blockLightDatas = []
 
-        chunkUpdateData += dataTypes.writeVarInt(len(chunkHeightmaps)) # length of heightmap array
+        # these are for the section 1 below the world min height (1 section below our lowest section)
+        skyLightBitset.append(False)
+        blockLightBitset.append(False)
+
+        packetData = bytes()
+        packetData += dataTypes.writeInt(x) # chunk coord x
+        packetData += dataTypes.writeInt(z) # chunk coord z
+
+        packetData += dataTypes.writeVarInt(len(chunkHeightmaps)) # length of heightmap array
         for hmap in chunkHeightmaps:
-            dataTypes.writeVarInt( HEIGHTMAP_TYPE_Enum[hmap[0]] ) # type of heightmap
-            dataTypes.writeVarInt(len(hmap[1])) # length of long array
-            for long in hmap[1]: dataTypes.writeLong(long) # the longs IN the array
-            
-        for _,section in enumerate(chunkNbt["sections"]):
-            # TODO: maybe make this accurately reflect what it should be? who knows
-            chunkUpdateData += dataTypes.writeShort(1) # block count (client keeps tracks of block places and breaks, and if the count hits 0 the chunk stops being rendered)
-            chunkUpdateData += dataTypes.writeShort(0) # fluid count
-            
+            packetData += dataTypes.writeVarInt( HEIGHTMAP_TYPE_Enum[hmap[0]] ) # type of heightmap
+            packetData += dataTypes.writeVarInt(len(hmap[1])) # length of long array
+            for long in hmap[1]: packetData += dataTypes.writeLong(long) # the longs IN the array
 
-            def writePalettedContainer(
-                    refName:str, namespace:str, isStaticReg:bool, needToUseNameProperty:bool=False,
-                    minBits:int=4, maxBits:int=8,
-                ):
+        sectionsData = bytes()
+        for sec in nbt["sections"]:
+            solidBlockCount = (16*16*16) # all blocks in the section are "filled"; so the chunk still rendered w/o counting up everything
+            fluidBlockCount = 0
+
+            def getPaletteEntryId(entry: dict, isBiome: bool=False) -> int:
+                id = 0
+                if isBiome:
+                    pass # todo fix this because I need a client for the synced registry entry
+                else:
+                    # block state palette
+                    identifier = entry["Name"]
+                    properties = entry.get("Properties", {})
+                    id = ServerSettings.getBlockStateId(identifier, properties)
+
+                return id
+
+            def writePalettedContainer( refName: str, isBiome: bool=False, minBits: int=4, maxBits: int=8):
                 containerBytes = bytes()
-                palette = section[refName]["palette"]
-                bitsMin = math.floor(math.log2(len(palette)))
-                chunkUpdatesBitsPerBlock = min(max(bitsMin,minBits),maxBits)
+                palette = sec[refName]["palette"]
+                bitsMin = (len(palette) - 1).bit_length()
+                bitsPerEntry = max(bitsMin, minBits)
 
-                getRegFunc = None
-                if isStaticReg: getRegFunc = ServerSettings.getRegistryData
-                else: getRegFunc = client.getRegistryData
-
-                # if 0 then it is all one block and we just say that
-                if bitsMin == 0:
+                # if 1 then it is all one block/biome and we just say that
+                if len(palette) == 1:
                     containerBytes += dataTypes.writeUnsignedByte(0) # bits per entry, 0=single valued
-                    paletteItemName = palette[0]
-                    if needToUseNameProperty: paletteItemName = paletteItemName["Name"]
-                    containerBytes += dataTypes.writeVarInt( getRegFunc(namespace, str(paletteItemName)) )
+                    paletteId = getPaletteEntryId(palette[0], isBiome)
+                    containerBytes += dataTypes.writeVarInt(paletteId)
                 else:
                     # Copy and paste the palette and the blocks list into the packet
-                    containerBytes += dataTypes.writeUnsignedByte(chunkUpdatesBitsPerBlock) # bits per entry
-                    containerBytes += dataTypes.writeVarInt(len(palette))
-                    for paletteItem in palette:
-                        if needToUseNameProperty: paletteItem = paletteItem["Name"]
-                        blockNum = getRegFunc(namespace, str(paletteItem))
-                        containerBytes += dataTypes.writeVarInt(blockNum)
+                    containerBytes += dataTypes.writeUnsignedByte(bitsPerEntry) # bits per entry
+                    containerBytes += dataTypes.writeVarInt(len(palette)) # length of the entries array
+                    for paletteEntry in palette:
+                        entryId = getPaletteEntryId(paletteEntry, isBiome)
+                        containerBytes += dataTypes.writeVarInt(entryId)
 
-                    blocks = section["block_states"]["data"]
-                    for long in blocks: containerBytes += dataTypes.writeLong(long)
+                    longData = sec[refName]["data"]
+                    for long in longData: containerBytes += dataTypes.writeLong(long)
 
                 return containerBytes
 
-            chunkUpdateData += writePalettedContainer("block_states", "minecraft:block", isStaticReg=True, needToUseNameProperty=True)
-            chunkUpdateData += writePalettedContainer("biomes", "minecraft:worldgen/biome", isStaticReg=False, minBits=1, maxBits=3)
-         
-        chunkUpdateData += dataTypes.writeVarInt(0) # we're not gonna send block entities here
-        # temp light data of all 0s
-        chunkUpdateData += dataTypes.writeVarInt(0)
-        chunkUpdateData += dataTypes.writeVarInt(0)
-        chunkUpdateData += dataTypes.writeVarInt(0)
-        chunkUpdateData += dataTypes.writeVarInt(0)
-        chunkUpdateData += dataTypes.writeVarInt(0)
-        chunkUpdateData += dataTypes.writeVarInt(0)
-"""
+            # TODO Send the real light data
+            skyLightBitset.append(True)
+            skyLightDatas.append([0b1111_1111] * 2048) # 0b1111_1111 | for (16*16*16)/2 so 4 bits per block
+            blockLightBitset.append(True)
+            blockLightDatas.append([0b1111_1111] * 2048)
+
+            sectionsData += dataTypes.writeShort(solidBlockCount) # solid block count
+            sectionsData += dataTypes.writeShort(fluidBlockCount) # fluid count
+            # block data paletted
+            sectionsData += writePalettedContainer("block_states")
+            # biome data paletted
+            sectionsData += writePalettedContainer("biomes", isBiome=True, minBits=1)
+            
+        packetData += dataTypes.writeVarInt(len(sectionsData))
+        packetData += sectionsData
+
+        # these are for the section 1 above the world max height (1 section above our highest section)
+        skyLightBitset.append(False)
+        blockLightBitset.append(False)
+
+        skyLightDatasRaw = [ dataTypes.writePrefixedUnsignedByteArray(arr) for arr in skyLightDatas ]
+        blockLightDatasRaw = [ dataTypes.writePrefixedUnsignedByteArray(arr) for arr in blockLightDatas ]
+
+        packetData += dataTypes.writeVarInt(0) # 0 block entities
+        # light data vv
+        packetData += dataTypes.writeBitSet(skyLightBitset) # sky light bitset
+        packetData += dataTypes.writeBitSet(blockLightBitset) # block light bitset
+        packetData += dataTypes.writeBitSet(dataTypes.BitSet()) # bitset of empty sky light
+        packetData += dataTypes.writeBitSet(dataTypes.BitSet()) # bitset of empty block light
+        packetData += dataTypes.writePrefixedRawDataArray(skyLightDatasRaw) # sky light data arr
+        packetData += dataTypes.writePrefixedRawDataArray(blockLightDatasRaw) # block light data arr
+        return packetData
+
 
 
 if __name__ == "__main__":
     r = Region("./world/overworld/r.0.0.mca")
     c = r.getChunk(0, 0)
     #print(c.getNBT().keys())
-    c.getChunkPacketData()
+    c.getChunkPacketDummyData()
 
