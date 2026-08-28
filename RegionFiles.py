@@ -6,6 +6,7 @@ from typing import Literal, TYPE_CHECKING
 import dataTypes
 from ServerSettings import ServerSettings
 from enumValues import *
+from registry import Registry
 if TYPE_CHECKING: from client import Client # import only for type checking
 
 class Region:
@@ -108,9 +109,9 @@ class Chunk:
         for sec in nbt["sections"]:
             yBottom = sec["Y"] * 16 # the start y level, add 16 to get the top y level
             solidBlockCount = 16*16*16 # default if all stone
-            allBlockId = ServerSettings.getBlockStateId("minecraft:stone", {})
+            allBlockId = Registry.getBlockStateId("minecraft:stone", {})
             if yBottom >= 60:
-                allBlockId = ServerSettings.getBlockStateId("minecraft:air", {})
+                allBlockId = Registry.getBlockStateId("minecraft:air", {})
                 solidBlockCount = 0
 
             skyLightBitset.append(True)
@@ -202,7 +203,7 @@ class Chunk:
                     # block state palette
                     identifier = entry["Name"]
                     properties = entry.get("Properties", {})
-                    id = ServerSettings.getBlockStateId(identifier, properties)
+                    id = Registry.getBlockStateId(identifier, properties)
 
                 return id
 

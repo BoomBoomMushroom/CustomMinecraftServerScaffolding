@@ -1,0 +1,133 @@
+import json
+import threading
+import os
+import nbtlib
+import io
+import time
+
+import dataTypes
+from ServerSettings import ServerSettings
+
+class SyncedRegistry:
+    def __init__(self, register: str):
+        # register should 100% not start with "minecraft:" because it is used for the folder lookup
+        self.register: str = register
+        self.namespace: str = f"minecraft:{register}"
+
+        self.hasLoadedAllEntries = False
+        self.entries: list[str] = []
+        self.entriesToNBTBytes: dict[str, bytes] = {}
+
+        threadLoadEntries = threading.Thread(target=self.loadEntries, args=(), daemon=True)
+        threadLoadEntries.start()
+
+    def loadEntries(self):
+        if self.hasLoadedAllEntries: return
+        path = f"{Registry.registriesPath}/{self.register}"
+                
+        tagFiles = [f for f in os.listdir(path) if os.path.isfile(os.path.join(path, f))]
+        tagFiles: list[str] = [f for f in tagFiles if f.endswith(".json")]
+
+        for file in tagFiles:
+            nameNoExtention = ".".join( file.split(".")[:-1] )
+            fileData = "{}"
+            with open(f"{path}/{file}") as f: fileData = f.read()
+
+            # load the json file data as NBT
+            nbtBytesIO = io.BytesIO()
+            try:
+                nbt = nbtlib.parse_nbt(fileData)
+            except Exception as e:
+                print(path, file, fileData)
+                raise e
+            nbtlib.File(nbt).write(nbtBytesIO)
+            nbtBytes: bytes = nbtBytesIO.getvalue()
+            if ServerSettings.protocol >= 764:
+                # remove bytes at indexes 1 and 2 since after 1.20.2 compound tags dont send their name when using networks for SOME reason
+                nbtBytes = bytes([nbtBytes[0]]) + nbtBytes[3:]
+
+            entryIdentifier = f"minecraft:{nameNoExtention}"
+            self.entries.append(entryIdentifier) # make sure we don't lose track of the order!
+            self.entriesToNBTBytes[entryIdentifier] = nbtBytes
+
+        self.hasLoadedAllEntries = True
+
+    def getPacketData(self) -> bytes:
+        # so we're gonna hang until we are ready to serve the data
+        timeout = 0
+        while self.hasLoadedAllEntries == False:
+            time.sleep(0.01)
+            timeout += 0.01
+            if timeout >= 5: raise TimeoutError("Timed out while waiting for registry entries to load", self.namespace)
+
+        packetData = bytes()
+        packetData += dataTypes.writeIdentifier(self.namespace) # registry id
+        packetData += dataTypes.writeVarInt(len(self.entries)) # lenth of entries array
+        for entry in self.entries:
+            packetData += dataTypes.writeIdentifier(entry) # name of the entry (already prefixed w/ "minecraft:")
+            packetData += dataTypes.writeBoolean(True) # yes we have nbt data
+            packetData += self.entriesToNBTBytes[entry] # the nbt entry data
+
+        return packetData
+
+class Registry:
+    registriesPath = "./registries/26.2/generated/data/minecraft"
+    registryTagsPath = "./registries/26.2/generated/data/minecraft/tags"
+
+    staticRegistriesFilePath = "./registries/26.2/generated/reports/registries.json"
+    with open(staticRegistriesFilePath) as f:
+        staticRegistries = json.load(f)
+
+    blockStatesPaletteFilePath = "./registries/26.2/generated/reports/blocks.json"
+    with open(blockStatesPaletteFilePath) as f:
+        blockStatesPalette: dict[str, dict] = json.load(f)
+
+    @classmethod
+    def getBlockStateId(cls, blockIdentifier: str, properties: dict[str, str]={}) -> int:
+        searchKeys: list[str] = list(properties.keys())
+
+        default: int = None
+        candidates: list[int] = []
+
+        listOfStates: list[dict] = cls.blockStatesPalette[blockIdentifier]["states"]
+        for state in listOfStates:
+            isMatching = True
+            stateId = state["id"]
+            isDefault: bool = state.get("default", False)
+            if isDefault:
+                default = stateId
+                if len(searchKeys) == 0: return default # we found what we wanted!
+
+            if len(searchKeys) == 0: continue
+            stateProperties: dict[str, str] = state["properties"]
+            for refKey in searchKeys:
+                if properties[refKey] == stateProperties[refKey]: continue
+                # if here then the property didn't match D:
+                isMatching = False
+                break
+
+            if isMatching == False: continue
+            candidates.append(stateId)
+
+        if len(candidates) == 0: raise Exception("Could not find any candidates w/ the desired properties!")
+        if len(candidates) > 1: raise Exception("Too many matches, try narrowing your search!")
+        return candidates[0]
+
+    @classmethod
+    def getRegistryNamespaceList(cls, namespace: str) -> list[str]:
+        return cls.staticRegistries.get(namespace)
+    @classmethod
+    def getRegistryData(cls, namespace: str, identifier: str) -> int:
+        return cls.getRegistryNamespaceList(namespace)["entries"][identifier]["protocol_id"]
+
+    @classmethod
+    def getSyncedRegistryPacketData(cls, register: str):
+        pass
+
+
+if __name__ == "__main__":
+    sr = SyncedRegistry("worldgen/biome")
+    #print(list(sr.entriesToNBTBytes.keys()))
+    #print(sr.getPacketData())
+    
+    pass

@@ -8,6 +8,7 @@ from ServerSettings import ServerSettings
 import packets
 from enumValues import *
 from RegionFiles import Region, Chunk
+from registry import Registry
 if TYPE_CHECKING: from client import Client # import only for type checking
 
 
@@ -310,13 +311,14 @@ class World:
     def tick(cls):
         cls.time += 1
 
+        # TODO: make the ping packet into a keepalive packet, thats what the vanilla server uses
         # send a ping packet ( https://minecraft.wiki/w/Java_Edition_protocol/Packets#Ping ) every 5 seconds or so
         if cls.time % (5*cls.tickRate) == 0:
             pingPacket = packets.Ping_ClientBound( dataTypes.writeInt(0) ) # 0 id for rn
             for plr in cls.players: plr.queuedOutboundPackets.append(pingPacket)
 
         if cls.time % 5 == 0:
-            bid = ServerSettings.getRegistryData("minecraft:block", "minecraft:stone")
+            bid = Registry.getRegistryData("minecraft:block", "minecraft:stone")
             bu = bytes()
             bu += dataTypes.writePosition(18, 64, 18)
             bu += dataTypes.writeVarInt(bid)

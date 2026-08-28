@@ -3,6 +3,7 @@ import dataTypes
 from ServerSettings import ServerSettings
 from world import World
 from enumValues import *
+from registry import Registry, SyncedRegistry
 
 import os
 import json
@@ -195,7 +196,7 @@ class Client:
         
         for register in queuedRegisters:
             print(register)
-            path = f"{ServerSettings.registriesPath}/{register}"
+            path = f"{Registry.registriesPath}/{register}"
 
             tagFiles = [f for f in os.listdir(path) if os.path.isfile(os.path.join(path, f))]
             tagFiles: list[str] = [f for f in tagFiles if f.endswith(".json")]
@@ -238,7 +239,7 @@ class Client:
 
 
         # registry tags
-        queuedTagsRegistries = os.listdir(ServerSettings.registryTagsPath)
+        queuedTagsRegistries = os.listdir(Registry.registryTagsPath)
         queuedTagsRegistries.remove("villager_trade")
         queuedTagsRegistries.remove("worldgen")
 
@@ -249,7 +250,7 @@ class Client:
         while len(queuedTagsRegistries) > 0:
             skipTagRegister = False
             tagRegister = queuedTagsRegistries.pop(0)
-            path = f"{ServerSettings.registryTagsPath}/{tagRegister}"
+            path = f"{Registry.registryTagsPath}/{tagRegister}"
             tagFiles = []
             for (dirpath, dirname, filenames) in os.walk(path):
                 dirpath = dirpath.split(path)[1]
@@ -289,7 +290,7 @@ class Client:
                             idx = arr.index(value)
                         except ValueError as e:
                             try:
-                                idx = ServerSettings.staticRegistries[f"minecraft:{tagRegister}"]["entries"][value]["protocol_id"]
+                                idx = Registry.staticRegistries[f"minecraft:{tagRegister}"]["entries"][value]["protocol_id"]
                             except:
                                 # probably didnt get to it yet, will do later
                                 queuedTagsRegistries.append(tagRegister)
