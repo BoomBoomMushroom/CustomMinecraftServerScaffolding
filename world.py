@@ -257,10 +257,6 @@ class World:
         setChunkCenterData += dataTypes.writeVarInt(playerChunkZ) # chunk z
         setChunkCenterPacket = packets.SetChunkCacheCenter_ClientBound(setChunkCenterData)
 
-        # send chunks to player
-        chunkSendThread = threading.Thread(target=cls.sendChunksInView, args=(client,), daemon=True)
-        chunkSendThread.start()
-
         client.queuedOutboundPackets.extend([
             playPacket,
             changeDiffPacket, playerAbilitiesPacket, heldSlotPacket,
@@ -271,6 +267,10 @@ class World:
             #tickingStatePacket,
             setChunkCenterPacket
         ])
+
+        # send chunks to player after we've queued the packets above
+        chunkSendThread = threading.Thread(target=cls.sendChunksInView, args=(client,), daemon=True)
+        chunkSendThread.start()
 
     @classmethod
     def sendChunksInView(cls, client: Client):

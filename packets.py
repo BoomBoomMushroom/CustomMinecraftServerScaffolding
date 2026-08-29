@@ -17,12 +17,26 @@ class Packet:
         self.boundDirection: BoundDirection = boundDir # ServerBound or ClientBound
         self.connectionState: ConnectionState = connState # Handshaking, status, login, configuration, or play
 
+        self.fullPacketData = None
+        self.rawBytesOffset: int = 0
+
     def getRawBytes(self) -> bytes:
+        if self.fullPacketData != None: return self.fullPacketData
         packetIdVarIntBytes: bytes = dataTypes.writeVarInt(self.id)
         packetLength = len(packetIdVarIntBytes) + len(self.data)
         lengthVarIntBytes: bytes = dataTypes.writeVarInt( packetLength )
 
-        return lengthVarIntBytes + packetIdVarIntBytes + self.data
+        self.fullPacketData: bytes = lengthVarIntBytes + packetIdVarIntBytes + self.data
+
+        return self.fullPacketData
+
+    def getSendingBytes(self) -> bytes:
+        return self.getRawBytes()[self.rawBytesOffset:]
+    def reportAmountOfBytesSent(self, num: int): self.rawBytesOffset += num
+    def isPacketFullySent(self) -> bool: return self.rawBytesOffset >= len(self.getRawBytes())
+    
+    def addToBytesOffset(self, toAdd: int):
+        self.rawBytesOffset += toAdd
 
     def handle(self) -> HandleResponse:
         print(self.data)

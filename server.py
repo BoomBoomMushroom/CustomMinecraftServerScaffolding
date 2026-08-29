@@ -28,12 +28,20 @@ def handleClient(conn: socket.socket, addr: socket._RetAddress):
             if clientObj.queuedOutboundPackets == None: break
 
             # Send queue outbound packets
+            packetsSent = 0
             while len(clientObj.queuedOutboundPackets) > 0:
+                if packetsSent >= 10: break # handle newer packets first then send out new ones, this way we don't lock up just sending stuff
                 outbound: packets.Packet = clientObj.queuedOutboundPackets.pop(0) # pop 1st for FIFO behaviour
-                print("Sending packet:", outbound)
-                packetBytes = outbound.getRawBytes()
+                rawBytes = outbound.getSendingBytes()
+                # print that we're sending a packet only if it's the first time we're sending it, not if we're continuing a partial packet
+                if outbound.rawBytesOffset == 0: print("Sending packet:", outbound)
                 try:
-                    conn.send(packetBytes)
+                    dataSent = conn.send(rawBytes)
+                    outbound.reportAmountOfBytesSent(dataSent)
+                    if outbound.isPacketFullySent() == False:
+                        # we haven't fully sent the packet, insert it back in so we can continue sending it's data
+                        clientObj.queuedOutboundPackets.insert(0, outbound)
+                    else: packetsSent += 1 # yay we sent it! increment our counter
                 except BlockingIOError as e:
                     clientObj.queuedOutboundPackets.insert(0, outbound)
                     break
