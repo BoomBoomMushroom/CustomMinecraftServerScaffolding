@@ -9,7 +9,7 @@ from ServerSettings import ServerSettings
 import packets
 from enumValues import *
 from RegionFiles import Region, Chunk
-from Registry import Registry
+from Registry import Registry, SyncedRegistry, TagsPacketForSyncedRegistry
 if TYPE_CHECKING: from client import Client # import only for type checking
 
 
@@ -305,6 +305,7 @@ class World:
     @classmethod
     def run(cls):
         Registry.preloadRequriedSyncedRegistries() # preload the required ones we need
+        TagsPacketForSyncedRegistry.init()
 
         while True:
             if cls.isTickFrozen: continue
