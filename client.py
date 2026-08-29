@@ -193,50 +193,27 @@ class Client:
 
         # from the above list, when printed i just copied it here to speed it up for now
         queuedRegisters = ["enchantment", "jukebox_song", "test_instance", "wolf_variant", "test_environment", "chicken_sound_variant", "cow_sound_variant", "pig_sound_variant", "dimension_type", "enchantment_provider", "enchantment_provider/raid", "sulfur_cube_archetype", "cat_variant", "cow_variant", "chat_type", "frog_variant", "damage_type", "worldgen", "worldgen/structure", "worldgen/world_preset", "worldgen/biome", "worldgen/placed_feature", "worldgen/structure_set", "worldgen/noise_settings", "worldgen/processor_list", "worldgen/configured_feature", "worldgen/multi_noise_biome_source_parameter_list", "worldgen/flat_level_generator_preset", "worldgen/noise", "worldgen/noise/nether", "worldgen/configured_carver", "banner_pattern", "zombie_nautilus_variant", "world_clock", "painting_variant", "cat_sound_variant", "wolf_sound_variant", "timeline", "dialog", "chicken_variant", "pig_variant", "trim_pattern", "instrument", "trim_material"]
-        
-        for register in queuedRegisters:
-            print(register)
-            path = f"{Registry.registriesPath}/{register}"
+        syncedRegisters = [ SyncedRegistry(reg) for reg in queuedRegisters ]
 
-            tagFiles = [f for f in os.listdir(path) if os.path.isfile(os.path.join(path, f))]
-            tagFiles: list[str] = [f for f in tagFiles if f.endswith(".json")]
-            
-            packetData = bytes()
-            packetData += dataTypes.writeIdentifier(f"minecraft:{register}")
-            packetData += dataTypes.writeVarInt(len(tagFiles))
+        for syncedReg in syncedRegisters:
+            print(syncedReg.register)
+            packetData = syncedReg.getPacketData() # this'll guarantee that `syncedReg.entries` is fully populated
+            self.registries[syncedReg.namespace] = syncedReg.entries
 
-            for file in tagFiles:
-                fileData = "{}"
-                with open(f"{path}/{file}") as f: fileData = f.read()
-
-                nbtBytesIO = io.BytesIO()
-                try:
-                    nbt = nbtlib.parse_nbt(fileData)
-                except Exception as e:
-                    print(path, file, fileData)
-                    raise e
-                nbtlib.File(nbt).write(nbtBytesIO)
-                nbtBytes: bytes = nbtBytesIO.getvalue()
-                if ServerSettings.protocol >= 764:
-                    # remove bytes at indexes 1 and 2 since after 1.20.2 compound tags dont send their name when using networks for SOME reason
-                    nbtBytes = bytes([nbtBytes[0]]) + nbtBytes[3:]
-                
-                nameNoExtention = ".".join( file.split(".")[:-1] )
-                packetData += dataTypes.writeIdentifier(f"minecraft:{nameNoExtention}")
-                packetData += dataTypes.writeBoolean(True)
-                packetData += nbtBytes
-
-                key = f"minecraft:{register}"
-                arr = self.registries.get(key, [])
-                arr.append(f"minecraft:{nameNoExtention}") # make sure we don't lose track of it!
-                self.registries[key] = arr
-
-                #print(register, file)
-
-            if packetData == None: continue
             registryPacket = packets.RegistryData_ClientBound(packetData)
             self.queuedOutboundPackets.append( registryPacket )
+        
+        """
+        for register in queuedRegisters:
+            print(register)
+            syncedReg = SyncedRegistry(register)
+            packetData = syncedReg.getPacketData() # this'll guarantee that `syncedReg.entries` is fully populated
+            self.registries[syncedReg.namespace] = syncedReg.entries
 
+            registryPacket = packets.RegistryData_ClientBound(packetData)
+            self.queuedOutboundPackets.append( registryPacket )
+        """
+         
 
         # registry tags
         queuedTagsRegistries = os.listdir(Registry.registryTagsPath)
