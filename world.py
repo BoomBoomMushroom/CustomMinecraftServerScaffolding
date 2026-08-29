@@ -280,23 +280,23 @@ class World:
         playerChunkZ = client.posZ // 16
 
         halfRenderDist = cls.renderDistance//2
+        #halfRenderDist = cls.renderDistance
 
-        def sendAllZ(client: Client, xVal: int):
-            for z in range(-halfRenderDist, halfRenderDist):
-                chunkX = playerChunkX + xVal
-                chunkZ = playerChunkZ + z
-                cls.loadRegionFileFromChunkCoords(chunkX, chunkZ)
-                region: Region = cls.getRegionFromChunkCoords(chunkX, chunkZ)
+        def sendChunk(client: Client, x: int, z: int):
+            chunkX = playerChunkX + x
+            chunkZ = playerChunkZ + z
+            cls.loadRegionFileFromChunkCoords(chunkX, chunkZ)
+            region: Region = cls.getRegionFromChunkCoords(chunkX, chunkZ)
 
-                chunk: Chunk = region.getChunk(chunkX, chunkZ)
-                chunkUpdateData = chunk.getChunkPacketData()
-                chunkUpdatePacket = packets.LevelChunkWithLight_ClientBound(chunkUpdateData)
-                client.queuedOutboundPackets.append(chunkUpdatePacket)
+            chunk: Chunk = region.getChunk(chunkX, chunkZ)
+            chunkUpdateData = chunk.getChunkPacketData()
+            chunkUpdatePacket = packets.LevelChunkWithLight_ClientBound(chunkUpdateData)
+            client.queuedOutboundPackets.append(chunkUpdatePacket)
 
         for x in range(-halfRenderDist, halfRenderDist):
-            threadX = threading.Thread(target=sendAllZ, args=(client,x), daemon=True)
-            threadX.start()
-            #sendAllZ(client, x)
+            for z in range(-halfRenderDist, halfRenderDist):
+                threadX = threading.Thread(target=sendChunk, args=(client,x,z), daemon=True)
+                threadX.start()
 
     @classmethod
     def sendPacketToAllPlayers(cls, packet: packets.Packet):
