@@ -11,6 +11,8 @@ from ServerSettings import ServerSettings
 class SyncedRegistry:
     def __init__(self, register: str):
         # register should 100% not start with "minecraft:" because it is used for the folder lookup
+        if register.startswith("minecraft:"): register = register.split("minecraft:")[1] # failsafe
+
         self.register: str = register
         self.namespace: str = f"minecraft:{register}"
 
@@ -18,8 +20,22 @@ class SyncedRegistry:
         self.entries: list[str] = []
         self.entriesToNBTBytes: dict[str, bytes] = {}
 
-        threadLoadEntries = threading.Thread(target=self.loadEntries, args=(), daemon=True)
-        threadLoadEntries.start()
+        # returns true if the folder exists
+        if self.errorIfNotFolder():
+            threadLoadEntries = threading.Thread(target=self.loadEntries, args=(), daemon=True)
+            threadLoadEntries.start()
+
+    def errorIfNotFolder(self) -> bool:
+        path = f"{Registry.registriesPath}/{self.register}"
+        if os.path.isdir(path): return True
+        raise FileNotFoundError("Registry folder not found", path)
+
+    def waitUntilLoaded(self, maxWaitTime: float=5):
+        timeout = 0
+        while self.hasLoadedAllEntries == False:
+            time.sleep(0.01)
+            timeout += 0.01
+            if timeout >= maxWaitTime: raise TimeoutError("Timed out while waiting for registry entries to load", self.namespace)
 
     def loadEntries(self):
         if self.hasLoadedAllEntries: return
@@ -53,12 +69,7 @@ class SyncedRegistry:
         self.hasLoadedAllEntries = True
 
     def getPacketData(self) -> bytes:
-        # so we're gonna hang until we are ready to serve the data
-        timeout = 0
-        while self.hasLoadedAllEntries == False:
-            time.sleep(0.01)
-            timeout += 0.01
-            if timeout >= 5: raise TimeoutError("Timed out while waiting for registry entries to load", self.namespace)
+        self.waitUntilLoaded()
 
         packetData = bytes()
         packetData += dataTypes.writeIdentifier(self.namespace) # registry id
@@ -69,6 +80,11 @@ class SyncedRegistry:
             packetData += self.entriesToNBTBytes[entry] # the nbt entry data
 
         return packetData
+
+    def getEntryIndex(self, entryIdentifier: str) -> int:
+        self.waitUntilLoaded()
+        return self.entries.index(entryIdentifier)
+
 
 class Registry:
     registriesPath = "./registries/26.2/generated/data/minecraft"
