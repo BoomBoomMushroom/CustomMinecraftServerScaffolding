@@ -22,7 +22,7 @@ class SyncedRegistry:
 
         # returns true if the folder exists
         if self.errorIfNotFolder():
-            threadLoadEntries = threading.Thread(target=self.loadEntries, args=(), daemon=True)
+            threadLoadEntries = threading.Thread(target=self._loadEntries, args=(), daemon=True)
             threadLoadEntries.start()
 
     def errorIfNotFolder(self) -> bool:
@@ -37,7 +37,8 @@ class SyncedRegistry:
             timeout += 0.01
             if timeout >= maxWaitTime: raise TimeoutError("Timed out while waiting for registry entries to load", self.namespace)
 
-    def loadEntries(self):
+    # move the loading into this function instead of getEntries so we can prevent race conditions & duplicate entries
+    def _loadEntries(self):
         if self.hasLoadedAllEntries: return
         path = f"{Registry.registriesPath}/{self.register}"
                 
@@ -67,6 +68,11 @@ class SyncedRegistry:
             self.entriesToNBTBytes[entryIdentifier] = nbtBytes
 
         self.hasLoadedAllEntries = True
+        return self.entries
+
+    def getEntries(self) -> list[str]:
+        self.waitUntilLoaded()
+        return self.entries
 
     def getPacketData(self) -> bytes:
         self.waitUntilLoaded()
@@ -136,14 +142,24 @@ class Registry:
     def getRegistryData(cls, namespace: str, identifier: str) -> int:
         return cls.getRegistryNamespaceList(namespace)["entries"][identifier]["protocol_id"]
 
+    syncedRegistries: dict[str, SyncedRegistry] = {}
     @classmethod
-    def getSyncedRegistryPacketData(cls, register: str):
-        pass
+    def getSyncedRegistry(cls, register: str):
+        syncedReg = cls.syncedRegistries.get(register, None)
+        if syncedReg == None:
+            syncedReg = SyncedRegistry(register)
+            cls.syncedRegistries[register] = syncedReg
+        
+        return syncedReg
+
+    @classmethod
+    def preloadRequriedSyncedRegistries(cls):
+        neededSyncedRegistries = ["enchantment", "jukebox_song", "test_instance", "wolf_variant", "test_environment", "chicken_sound_variant", "cow_sound_variant", "pig_sound_variant", "dimension_type", "enchantment_provider", "enchantment_provider/raid", "sulfur_cube_archetype", "cat_variant", "cow_variant", "chat_type", "frog_variant", "damage_type", "worldgen", "worldgen/structure", "worldgen/world_preset", "worldgen/biome", "worldgen/placed_feature", "worldgen/structure_set", "worldgen/noise_settings", "worldgen/processor_list", "worldgen/configured_feature", "worldgen/multi_noise_biome_source_parameter_list", "worldgen/flat_level_generator_preset", "worldgen/noise", "worldgen/noise/nether", "worldgen/configured_carver", "banner_pattern", "zombie_nautilus_variant", "world_clock", "painting_variant", "cat_sound_variant", "wolf_sound_variant", "timeline", "dialog", "chicken_variant", "pig_variant", "trim_pattern", "instrument", "trim_material"]
+        [ cls.getSyncedRegistry(reg) for reg in neededSyncedRegistries ] # preloads them
 
 
 if __name__ == "__main__":
-    sr = SyncedRegistry("worldgen/biome")
-    #print(list(sr.entriesToNBTBytes.keys()))
-    #print(sr.getPacketData())
+    a = Registry.getSyncedRegistry("minecraft:world_clock").getEntries()
+    print(a)
     
     pass

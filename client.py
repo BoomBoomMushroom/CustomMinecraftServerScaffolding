@@ -3,7 +3,7 @@ import dataTypes
 from ServerSettings import ServerSettings
 from world import World
 from enumValues import *
-from registry import Registry, SyncedRegistry
+from Registry import Registry, SyncedRegistry
 
 import os
 import json
@@ -53,18 +53,10 @@ class Client:
         self.playerEntityId: int = World.allocateEntityId()
         self.teleportId: int = random.randint(1, 999)
 
-        self.registries: dict[str, list[int]] = {}
-
         self.state: packets.ConnectionState = "HANDSHAKING"
         self.socketData: bytes = bytes()
         self.unhandledPackets: list[packets.Packet] = []
         self.queuedOutboundPackets: list[packets.Packet] = []
-
-    def getRegistryNamespaceList(self, namespace: str) -> list[str]:
-        return self.registries.get(namespace)
-
-    def getRegistryData(self, namespace: str, identifier: str) -> int:
-        return self.getRegistryNamespaceList(namespace).index(identifier)
 
     def handlePacketReturn(self, packetResponse: packets.HandleResponse):
         if packetResponse == None: return
@@ -193,26 +185,13 @@ class Client:
 
         # from the above list, when printed i just copied it here to speed it up for now
         queuedRegisters = ["enchantment", "jukebox_song", "test_instance", "wolf_variant", "test_environment", "chicken_sound_variant", "cow_sound_variant", "pig_sound_variant", "dimension_type", "enchantment_provider", "enchantment_provider/raid", "sulfur_cube_archetype", "cat_variant", "cow_variant", "chat_type", "frog_variant", "damage_type", "worldgen", "worldgen/structure", "worldgen/world_preset", "worldgen/biome", "worldgen/placed_feature", "worldgen/structure_set", "worldgen/noise_settings", "worldgen/processor_list", "worldgen/configured_feature", "worldgen/multi_noise_biome_source_parameter_list", "worldgen/flat_level_generator_preset", "worldgen/noise", "worldgen/noise/nether", "worldgen/configured_carver", "banner_pattern", "zombie_nautilus_variant", "world_clock", "painting_variant", "cat_sound_variant", "wolf_sound_variant", "timeline", "dialog", "chicken_variant", "pig_variant", "trim_pattern", "instrument", "trim_material"]
-        syncedRegisters = [ SyncedRegistry(reg) for reg in queuedRegisters ]
-
-        for syncedReg in syncedRegisters:
-            print(syncedReg.register)
-            packetData = syncedReg.getPacketData() # this'll guarantee that `syncedReg.entries` is fully populated
-            self.registries[syncedReg.namespace] = syncedReg.entries
-
-            registryPacket = packets.RegistryData_ClientBound(packetData)
-            self.queuedOutboundPackets.append( registryPacket )
         
-        """
         for register in queuedRegisters:
             print(register)
-            syncedReg = SyncedRegistry(register)
-            packetData = syncedReg.getPacketData() # this'll guarantee that `syncedReg.entries` is fully populated
-            self.registries[syncedReg.namespace] = syncedReg.entries
-
+            syncedReg = Registry.getSyncedRegistry(register)
+            packetData = syncedReg.getPacketData()
             registryPacket = packets.RegistryData_ClientBound(packetData)
             self.queuedOutboundPackets.append( registryPacket )
-        """
          
 
         # registry tags
@@ -263,9 +242,9 @@ class Client:
                     else:
                         idx = -1
                         try:
-                            arr = self.registries.get(f"minecraft:{tagRegister}", [])
-                            idx = arr.index(value)
-                        except ValueError as e:
+                            idx = Registry.getSyncedRegistry(f"minecraft:{tagRegister}").getEntryIndex(value)
+                        except (ValueError, FileNotFoundError) as e:
+                            # if we get a FileNotFoundError then we tried to access a static registry as a synced one
                             try:
                                 idx = Registry.staticRegistries[f"minecraft:{tagRegister}"]["entries"][value]["protocol_id"]
                             except:

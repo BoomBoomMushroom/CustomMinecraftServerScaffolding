@@ -9,7 +9,7 @@ from ServerSettings import ServerSettings
 import packets
 from enumValues import *
 from RegionFiles import Region, Chunk
-from registry import Registry
+from Registry import Registry
 if TYPE_CHECKING: from client import Client # import only for type checking
 
 
@@ -88,7 +88,7 @@ class World:
         playData += dataTypes.writeBoolean(False) # reduced debug info (false for development)
         playData += dataTypes.writeBoolean(ServerSettings.gameRules.doImmediateRespawn==False) # enable respawn screen
         playData += dataTypes.writeBoolean(ServerSettings.gameRules.doLimitedCrafting) # do limited crafting (unused by client)
-        playData += dataTypes.writeVarInt( client.getRegistryData("minecraft:dimension_type", "minecraft:overworld") ) # dimention type
+        playData += dataTypes.writeVarInt( Registry.getSyncedRegistry("minecraft:dimension_type").getEntryIndex("minecraft:overworld") ) # dimention type
         playData += dataTypes.writeIdentifier("minecraft:overworld") # dimention name
         playData += dataTypes.writeLong(0) # hashed seed, first 8 bytes of it TODO make it take cls.seed and hash it and shi
         playData += dataTypes.writeUnsignedByte(GAMEMODE_Enum[client.gamemode]) # game mode
@@ -219,7 +219,8 @@ class World:
         # update time
         setTimeData = bytes()
         setTimeData += dataTypes.writeLong(cls.time) # world age
-        setTimeClocks: list[str] = client.getRegistryNamespaceList("minecraft:world_clock")
+        setTimeClocks: list[str] = Registry.getSyncedRegistry("minecraft:world_clock").getEntries()
+        print("\t\t", setTimeClocks)
         setTimeData += dataTypes.writeVarInt(len(setTimeClocks)) # len of array of Clocks
         for clockRegId, identifier in enumerate(setTimeClocks):
             setTimeData += dataTypes.writeVarInt(clockRegId) # clock registry id
@@ -288,7 +289,7 @@ class World:
                 region: Region = cls.getRegionFromChunkCoords(chunkX, chunkZ)
 
                 chunk: Chunk = region.getChunk(chunkX, chunkZ)
-                chunkUpdateData = chunk.getChunkPacketData(client)
+                chunkUpdateData = chunk.getChunkPacketData()
                 chunkUpdatePacket = packets.LevelChunkWithLight_ClientBound(chunkUpdateData)
                 client.queuedOutboundPackets.append(chunkUpdatePacket)
 
@@ -303,6 +304,8 @@ class World:
 
     @classmethod
     def run(cls):
+        Registry.preloadRequriedSyncedRegistries() # preload the required ones we need
+
         while True:
             if cls.isTickFrozen: continue
             cls.tick()

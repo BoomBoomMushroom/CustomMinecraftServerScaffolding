@@ -6,7 +6,7 @@ from typing import Literal, TYPE_CHECKING
 import dataTypes
 from ServerSettings import ServerSettings
 from enumValues import *
-from registry import Registry
+from Registry import Registry
 if TYPE_CHECKING: from client import Client # import only for type checking
 
 class Region:
@@ -149,7 +149,7 @@ class Chunk:
         packetData += dataTypes.writePrefixedRawDataArray(blockLightDatasRaw) # block light data arr
         return packetData
 
-    def getChunkPacketData(self, registryReferenceClient: Client=None) -> bytes:
+    def getChunkPacketData(self) -> bytes:
         if self.cachedPacketData != None:
             #print("I'm cached :D sending that back")
             return self.cachedPacketData
@@ -197,8 +197,7 @@ class Chunk:
             def getPaletteEntryId(entry: dict|str, isBiome: bool=False) -> int:
                 id = 0
                 if isBiome:
-                    if registryReferenceClient == None: return id
-                    id = registryReferenceClient.getRegistryData("minecraft:worldgen/biome", entry)
+                    id = Registry.getSyncedRegistry("minecraft:worldgen/biome").getEntryIndex(entry)
                 else:
                     # block state palette
                     identifier = entry["Name"]
