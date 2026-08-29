@@ -45,6 +45,15 @@ class Client:
         self.onGround = False
         self.gamemode: GAMEMODE = "NULL"
 
+        self.isSprinting = False
+        self.isElytraGliding = False
+        self.isFlying = False # flying like creative mode, not via elytra
+
+        self.isAllowedToFly = True
+        self.isInvulnerable = False
+        self.canInstaBreakBlocks = False
+        self.opLevel = 4 # 0 to 4 inclusive
+
         self.isUnsignedplayerPropertiesFromAPI: bool = False
         self.playerPropertiesFromAPI: list[dict[str, str]] = [] # list of properties from the mojang api for our player. eg textures & capes
 
@@ -75,6 +84,9 @@ class Client:
         if packetResponse.updateRoation != None: self.yaw, self.pitch = packetResponse.updateRoation
         if packetResponse.updateOnGround != None: self.onGround = packetResponse.updateOnGround
         if packetResponse.updateAgainstWall != None: pass # dont care abt it rn
+        if packetResponse.updateSprinting != None: self.isSprinting = packetResponse.updateSprinting
+        if packetResponse.updateElytraGliding != None: self.isElytraGliding = packetResponse.updateElytraGliding
+        if packetResponse.updateFlying != None: self.isFlying = packetResponse.updateFlying
 
         # client todo stuff
         if packetResponse.sendLoginFinishedPacket == True: self.sendLoginFinishedPacket()

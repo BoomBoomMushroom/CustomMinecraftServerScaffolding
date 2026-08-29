@@ -335,6 +335,119 @@ class Swing_ServerBound(Packet):
         isMainHand = (hand==0) # if false, used offhand
         # TODO: I probably need to make the server tell everyone that this player has swung their hand
 
+
+class PlayerInput_ServerBound(Packet):
+    def __init__(self, data = bytearray(0)):
+        super().__init__(0x2b, "player_input", data, "ServerBound", "PLAY")
+    def handle(self):
+        flags, _ = dataTypes.readUnsignedByte(self.data)
+        # these flags are used for minecart controls
+        forward = flags & 0x01 == 0x01
+        backward = flags & 0x02 == 0x02
+        left = flags & 0x04 == 0x04
+        right = flags & 0x08 == 0x08
+        jump = flags & 0x10 == 0x10
+        sneak = flags & 0x20 == 0x20
+        sprint = flags & 0x40 == 0x40
+        # TODO: make it for minecart controls
+
+class PlayerCommand_ServerBound(Packet):
+    def __init__(self, data = bytearray(0)):
+        super().__init__(0x2a, "player_command", data, "ServerBound", "PLAY")
+    def handle(self):
+        toConsume: bytes = self.data
+        eid, bytesRead = dataTypes.readVarInt(toConsume)
+        toConsume = toConsume[bytesRead:]
+        actionId, bytesRead = dataTypes.readVarInt(toConsume)
+        toConsume = toConsume[bytesRead:]
+        jumpBoost, bytesRead = dataTypes.readVarInt(toConsume) # used for horse jump only (0-100 inclusive), else it is 0
+        toConsume = toConsume[bytesRead:]
+
+        response = HandleResponse()
+        if actionId == 0:
+            # leave bed
+            # only sent when clicking "leave bed" in the gui, not when it becomes morning
+            pass
+        if actionId == 1:
+            # start sprinting
+            response.updateSprinting = True
+        if actionId == 2:
+            # stop sprinting
+            response.updateSprinting = False
+        if actionId == 3:
+            # start jump w/ horse
+            pass
+        if actionId == 4:
+            # stop jump w/ horse
+            pass
+        if actionId == 5:
+            # open vehicle inventory
+            # only when went pressing open inventory button while on a horse or chest boat
+            pass
+        if actionId == 6:
+            # start flying w/ elytra
+            response.updateElytraGliding = True
+
+        return response
+
+class PlayerAbilities_ServerBound(Packet):
+    def __init__(self, data = bytearray(0)):
+        super().__init__(0x28, "player_abilities", data, "ServerBound", "PLAY")
+    def handle(self):
+        flags, _ = dataTypes.readByte(self.data)
+        isFlying = flags & 0x02 == 0x02
+        response = HandleResponse()
+        response.updateFlying = isFlying
+        return response
+
+class PlayerAction_ServerBound(Packet):
+    def __init__(self, data = bytearray(0)):
+        super().__init__(0x29, "player_action", data, "ServerBound", "PLAY")
+    def handle(self):
+        toConsume: bytes = self.data
+        status, bytesRead = dataTypes.readVarInt(toConsume)
+        toConsume = toConsume[bytesRead:]
+        location, bytesRead = dataTypes.readPosition(toConsume)
+        toConsume = toConsume[bytesRead:]
+        face, bytesRead = dataTypes.readByte(toConsume)
+        toConsume = toConsume[bytesRead:]
+        sequence, bytesRead = dataTypes.readVarInt(toConsume) # used to ack a block has been broken w/ that id
+        toConsume = toConsume[bytesRead:]
+
+        # face enum -> 0=-Y, 1=+Y, 2=-Z, 3=+Z, 4=-X, 5=+X
+
+        if status == 0:
+            # start digging
+            pass
+        if status == 1:
+            # cancelled digging
+            pass
+        if status == 2:
+            # finished digging
+            pass
+        if status == 3:
+            # drop item stack
+            pass
+        if status == 4:
+            # drop item
+            pass
+        if status == 5:
+            # shoot arrow/finish eating
+            pass
+        if status == 6:
+            # swap item in hand
+            pass
+        if status == 7:
+            # stab
+            pass
+
+        # TODO: have client.py valiate this by making sure the distance between our eyes and the block is <= 6
+        # TODO: Have the server actually handle ts
+
+        response = HandleResponse()
+        return response
+
+
 """Updates"""
 class BlockUpdate_ClientBound(Packet):
     def __init__(self, data = bytearray(0)):
@@ -426,6 +539,9 @@ class HandleResponse:
         self.updateRoation: tuple[float, float] = None # yaw, pitch
         self.updateOnGround: bool = None
         self.updateAgainstWall: bool = None
+        self.updateSprinting: bool = None
+        self.updateElytraGliding: bool = None
+        self.updateFlying: bool = None
 
         # client todo flags:
         self.sendLoginFinishedPacket = False
@@ -471,6 +587,10 @@ PLAY_PACKETS = [
 
     # activities
     Swing_ServerBound,
+
+    PlayerInput_ServerBound, PlayerCommand_ServerBound, PlayerAbilities_ServerBound,
+    PlayerAction_ServerBound, 
+
 
     # misc
     Ping_ClientBound, Pong_ServerBound,

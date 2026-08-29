@@ -103,6 +103,9 @@ def writeUnsignedByte(value: int) -> bytes:
 def writeByte(value: int) -> bytes:
     return struct.pack(">b", value)
 
+def readUnsignedByte(value: int) -> tuple[int, int]:
+    val = struct.unpack(">B", value)[0]
+    return (val, 1)
 def readByte(value: int) -> tuple[int, int]:
     val = struct.unpack(">b", value)[0]
     return (val, 1)
@@ -205,9 +208,16 @@ def writeIdentifier(identifier: str) -> bytes:
 def writePosition(x: int, y: int, z: int) -> bytes:
     x <<= (12+26) # 12 for y, 26 for z
     y <<= 26 # 26 for z
-    n = x | y | z # bit old 8 byete number (26+12+26=64 bits)
+    n = x | y | z # bit old 8 byte number (26+12+26=64 bits)
     return struct.pack('>q', n)
 
+def readPosition(data: bytes) -> tuple[tuple[int, int, int], int]:
+    packedNum = struct.unpack('>q', data[0:64])[0]
+    x = (packedNum & (2**26 - 1) >> (26+12)) # 0b111... (26 ones), 12 for y, 26 for z
+    y = (packedNum & (2**12 - 1) >> 26) # 0b111... (12 ones), 26 for z
+    z = packedNum & (2**26 - 1) # 0b111... (26 ones)
+
+    return ((x,y,z), 64)
 
 def reverseBits(value: int, bits: int=8) -> int:
     return int( ('{:0'+str(bits)+'b}').format(value)[::-1], 2)

@@ -21,16 +21,22 @@ class World:
 
     seed: int = 0
     time: int = 0 # time in ticks, time % 24000 -> 0=sunrise, 6000=noon, 12000=sunset, and 18000=midnight
-    renderDistance: int = 16
-    simulationDistance: int = 8 
-    difficulty: DIFFICULTY = "PEACEFUL"
-    difficultyLocked: bool = False
-    defaultGameMode: GAMEMODE = "SURVIVAL"
-    worldSeaLevel: int = 60
-    worldBorder: dict[str, float] = {"centerX": 0, "centerZ": 0, "diameter": 1_000_000, "warningBlocks": 0}
-    worldSpawn: dict[str, float] = {"dimension": "minecraft:overworld", "x": 0, "y": 0, "z": 0, "yaw": 0, "pitch": 0}
+
     tickRate: float = 20 # 20 tps
     isTickFrozen: bool = False
+
+    renderDistance: int = 16
+    simulationDistance: int = 8 
+
+    difficulty: DIFFICULTY = "PEACEFUL"
+    difficultyLocked: bool = False
+
+    defaultGameMode: GAMEMODE = "SURVIVAL"
+    isHardcore: bool = False
+
+    worldSeaLevel: int = 60
+    worldBorder: dict[str, float] = {"centerX": 0, "centerZ": 0, "diameter": 1_000_000, "warningBlocks": 0}
+    worldSpawn: dict[str, float] = {"dimension": "minecraft:overworld", "x": 0, "y": 60, "z": 0, "yaw": 0, "pitch": 0}
 
     worldName: str = "world"
 
@@ -53,7 +59,7 @@ class World:
     def loadRegionFileFromChunkCoords(cls, chunkX: int, chunkZ: int, overwrite: bool=False):
         regionX = chunkX // 32
         regionZ = chunkZ // 32
-        regionFileName = f"./world/overworld/r.{regionX}.{regionZ}.mca"
+        regionFileName = f"./{cls.worldName}/overworld/r.{regionX}.{regionZ}.mca"
         cls.loadRegionFile(regionFileName, overwrite)
 
     @classmethod
@@ -77,7 +83,7 @@ class World:
         # login packet
         playData: bytes = bytes()
         playData += dataTypes.writeInt(client.playerEntityId) # player entity id, EID
-        playData += dataTypes.writeBoolean(False) # is hardcore
+        playData += dataTypes.writeBoolean(cls.isHardcore) # is hardcore
         playData += dataTypes.writeVarInt(3) # all dimention names, 3 for how many dimention names we're giving
         playData += dataTypes.writeIdentifier("minecraft:overworld")
         playData += dataTypes.writeIdentifier("minecraft:nether")
@@ -111,12 +117,17 @@ class World:
         changeDiffPacket = packets.ChangeDifficulty_ClientBound(changeDiffData)
 
         # player abilities packet
-        playerAbilitiesData = bytes()
-        abilitiesFlagsVal = 0 | 0x2 | 0x4
         # flagsVal |= 0x1 # if player is invulnurable
         # flagsVal |= 0x2 # if player is flying
         # flagsVal |= 0x4 # if player is allowed to fly
         # flagsVal |= 0x8 # for "creative mode" (instant break blocks)
+        abilitiesFlagsVal = 0
+        if client.isInvulnerable: abilitiesFlagsVal |= 0x1
+        if client.isFlying: abilitiesFlagsVal |= 0x2
+        if client.isAllowedToFly: abilitiesFlagsVal |= 0x4
+        if client.canInstaBreakBlocks: abilitiesFlagsVal |= 0x8
+
+        playerAbilitiesData = bytes()
         playerAbilitiesData += dataTypes.writeByte(abilitiesFlagsVal)
         playerAbilitiesData += dataTypes.writeFloat(0.05) # flying speed (default = 0.05)
         playerAbilitiesData += dataTypes.writeFloat(0.1) # fov modifier (default is 0.1?) check https://minecraft.wiki/w/Java_Edition_protocol/Packets#Player_Abilities_(clientbound)
@@ -132,7 +143,7 @@ class World:
         # entity event packet | for the OP permission level
         entityEventData = bytes()
         entityEventData += dataTypes.writeInt( client.playerEntityId ) # Entity ID
-        entityEventData += dataTypes.writeByte(28) # 24->28 = op level 0->4 respectivly
+        entityEventData += dataTypes.writeByte(24 + client.opLevel) # 24->28 = op level 0->4 respectivly
         entityEventPacket = packets.EntityEvent_ClientBound(entityEventData)
 
         # commands packet
@@ -228,14 +239,14 @@ class World:
             setTimeData += dataTypes.writeFloat(0) # fractional part of the time in ticks (non-negative num less than 1)
             setTimeData += dataTypes.writeFloat(1) # rate, in clock tick per client tick
         setTimePacket = packets.SetTime_ClientBound(setTimeData)
-        # TODO, check sending the time at 24000+ to see if the client handles it and auto modulos it or if we have to in the varlong
+        # sending the time at 24000+ seems to auto modulos so we don't have to do it
         
         # set default spawn location (optional, "home" spawn,,, not where client will spawn in)
         defaultSpawnData = bytes()
-        defaultSpawnData += dataTypes.writeIdentifier("minecraft:overworld") # dimension
-        defaultSpawnData += dataTypes.writePosition(0, 60, 0) # pos
-        defaultSpawnData += dataTypes.writeFloat(0) # yaw
-        defaultSpawnData += dataTypes.writeFloat(0) # pitch
+        defaultSpawnData += dataTypes.writeIdentifier(cls.worldSpawn["dimension"]) # dimension
+        defaultSpawnData += dataTypes.writePosition(cls.worldSpawn["x"], cls.worldSpawn["y"], cls.worldSpawn["z"]) # pos
+        defaultSpawnData += dataTypes.writeFloat(cls.worldSpawn["yaw"]) # yaw
+        defaultSpawnData += dataTypes.writeFloat(cls.worldSpawn["pitch"]) # pitch
         defaultSpawnPacket = packets.SetDefaultSpawnPosition_ClientBound(defaultSpawnData)
 
         # game event (for telling the client to wait for chunks)
@@ -247,7 +258,7 @@ class World:
         # set ticking state (sets the tickrate and if its frozen or not)
         tickingStateData = bytes()
         tickingStateData += dataTypes.writeFloat(cls.tickRate) # tick rate
-        tickingStateData += dataTypes.writeBoolean(False) # is frozen?
+        tickingStateData += dataTypes.writeBoolean(cls.isTickFrozen) # is frozen?
         #tickingStatePacket = packets.TickingState_ClientBound(tickingStateData) # I have no idea why this fucks up the speed of the client's game, no matter the value I put. Im just gonan remove it for rn
 
         # set center chunk
@@ -279,7 +290,8 @@ class World:
         playerChunkX = client.posX // 16
         playerChunkZ = client.posZ // 16
 
-        halfRenderDist = cls.renderDistance//2
+        halfRenderDist = 2
+        #halfRenderDist = cls.renderDistance//2
         #halfRenderDist = cls.renderDistance
 
         def sendChunk(client: Client, x: int, z: int):

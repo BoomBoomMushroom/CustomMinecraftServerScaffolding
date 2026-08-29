@@ -68,10 +68,7 @@ class Region:
     # TODO: have the ability to modify the chunks and maybe save the region file back again
 
 
-# TODO: btw the caching of the chunk is done baed on the first player that loads it,
-#   this shouldn't be a major issue if all of the player's synced registries are the same
-#   from our sender. (I think it does right now)
-
+# TODO: make a lock/waiter on the getters like in Registry.py w/ synced registries to prevent weird stuff
 class Chunk:
     def __init__(self, dataBytes):
         self.data = dataBytes
@@ -266,6 +263,8 @@ class Chunk:
         return packetData
 
 
+# TODO: when chunks are loaded we should decode them into a bunch of blocks so it's easy to modify it
+#   after each change we can cache the packet data we would need
 
 if __name__ == "__main__":
     r = Region("./world/overworld/r.0.0.mca")
