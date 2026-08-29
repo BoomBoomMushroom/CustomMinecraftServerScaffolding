@@ -412,7 +412,6 @@ class PlayerAction_ServerBound(Packet):
         face, bytesRead = dataTypes.readByte(toConsume)
         toConsume = toConsume[bytesRead:]
         sequence, bytesRead = dataTypes.readVarInt(toConsume) # used to ack a block has been broken w/ that id
-        toConsume = toConsume[bytesRead:]
 
         # face enum -> 0=-Y, 1=+Y, 2=-Z, 3=+Z, 4=-X, 5=+X
 
@@ -557,44 +556,36 @@ class HandleResponse:
 
 HANDSHAKING_PACKETS = [Intention_ServerBound]
 STATUS_PACKETS = [
-    StatusResponse_ClientBound, StatusResponse_ServerBound,
-    PongResponse_ClientBound, PingResponse_ServerBound,
+    StatusResponse_ServerBound,
+    PingResponse_ServerBound,
 ]
 LOGIN_PACKETS = [
     Hello_ServerBound,
-    LoginFinished_ClientBound, LoginAcknowledged_ServerBound,
+    LoginAcknowledged_ServerBound,
 ]
 CONFIGURATION_PACKETS = [
     ClientInformation_ServerBound,
-    RegistryData_ClientBound,
-    FinishConfiguration_ClientBound, FinishConfiguration_ServerBound,
-    UpdateTags_ClientBound,
-    CustomPayload_ServerBound, CustomPayload_ClientBound,
-    UpdateEnabledFeatures_ClientBound, SelectKnownPacks_ClientBound,
+    FinishConfiguration_ServerBound,
+    CustomPayload_ServerBound,
 ]
 PLAY_PACKETS = [
-    Login_ClientBound, PlayerLoaded_ServerBound, ClientTickEnd_ServerBound,
+    PlayerLoaded_ServerBound, ClientTickEnd_ServerBound,
 
     # position
-    PlayerPosition_ClientBound, AcceptTeleportation_ServerBound,
+    AcceptTeleportation_ServerBound,
     MovePlayerPosRot_ServerBound, MovePlayerPos_ServerBound, MovePlayerRot_ServerBound, MovePlayerStatusOnly_ServerBound,
 
     # Server setting stuff
-    PlayerAbilities_ClientBound, SetHeldSlot_ClientBound, PlayerInfoUpdate_ClientBound,
-    InitializeBorder_ClientBound, SetTime_ClientBound, ChangeDifficulty_ClientBound,
-    GameEvent_ClientBound,
-    SetChunkCacheCenter_ClientBound, LevelChunkWithLight_ClientBound,
 
     # activities
     Swing_ServerBound,
 
     PlayerInput_ServerBound, PlayerCommand_ServerBound, PlayerAbilities_ServerBound,
-    PlayerAction_ServerBound, 
-
+    PlayerAction_ServerBound,
 
     # misc
-    Ping_ClientBound, Pong_ServerBound,
-    KeepAlive_ClientBound, KeepAlive_ServerBound,
+    Pong_ServerBound,
+    KeepAlive_ServerBound,
 ]
 
 def decodePacket(data: bytes, connState: ConnectionState) -> tuple[bytes, Packet]:
