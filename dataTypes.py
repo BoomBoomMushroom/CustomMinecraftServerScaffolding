@@ -154,6 +154,10 @@ def writeInt(val: int) -> bytes:
 # longs
 def writeLong(value: int) -> bytes:
     return struct.pack(">q", value)
+def readLong(value: int) -> tuple[int, int]:
+    val = struct.unpack(">q", value[0:8])[0]
+    return (val, 8)
+
 
 # floats
 def writeFloat(value: float) -> bytes:

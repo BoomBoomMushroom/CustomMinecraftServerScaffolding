@@ -2,6 +2,7 @@ import time
 from typing import Literal, TYPE_CHECKING
 import math
 import threading
+import random
 
 import dataTypes
 from ServerSettings import ServerSettings
@@ -314,8 +315,9 @@ class World:
         # TODO: make the ping packet into a keepalive packet, thats what the vanilla server uses
         # send a ping packet ( https://minecraft.wiki/w/Java_Edition_protocol/Packets#Ping ) every 5 seconds or so
         if cls.time % (5*cls.tickRate) == 0:
-            pingPacket = packets.Ping_ClientBound( dataTypes.writeInt(0) ) # 0 id for rn
-            for plr in cls.players: plr.queuedOutboundPackets.append(pingPacket)
+            for plr in cls.players:
+                keepAlivePacket = packets.KeepAlive_ClientBound( random.randbytes(8) ) # 8 bytes for a random long
+                plr.queuedOutboundPackets.append(keepAlivePacket)
 
         if cls.time % 5 == 0:
             bid = Registry.getRegistryData("minecraft:block", "minecraft:stone")

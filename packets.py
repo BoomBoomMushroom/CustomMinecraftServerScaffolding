@@ -401,6 +401,16 @@ class Pong_ServerBound(Packet):
         pingId = dataTypes.readInt( self.data )[0]
         return # nothing else to do
 
+class KeepAlive_ClientBound(Packet):
+    def __init__(self, data = bytearray(0)):
+        super().__init__(0x2C, "keep_alive", data, "ClientBound", "PLAY")
+class KeepAlive_ServerBound(Packet):
+    def __init__(self, data = bytearray(0)):
+        super().__init__(0x1C, "keep_alive", data, "ServerBound", "PLAY")
+    def handle(self):
+        keepAliveId = dataTypes.readLong( self.data )[0]
+        return # nothing else to do
+
 
 # Extra classes
 class HandleResponse:
@@ -464,6 +474,7 @@ PLAY_PACKETS = [
 
     # misc
     Ping_ClientBound, Pong_ServerBound,
+    KeepAlive_ClientBound, KeepAlive_ServerBound,
 ]
 
 def decodePacket(data: bytes, connState: ConnectionState) -> tuple[bytes, Packet]:
