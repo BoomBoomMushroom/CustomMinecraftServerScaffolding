@@ -289,7 +289,7 @@ class MovePlayerPosRot_ServerBound(Packet):
 
         res = HandleResponse()
         res.updatePosition = (x, feetY, z)
-        res.updateRoation = (yaw, pitch)
+        res.updateRotation = (yaw, pitch)
         res.updateOnGround = onGround
         res.updateAgainstWall = pushingWall
         return res
@@ -308,7 +308,7 @@ class MovePlayerRot_ServerBound(Packet):
         pushingWall = (flags & 0x02) == 0x02
 
         res = HandleResponse()
-        res.updateRoation = (yaw, pitch)
+        res.updateRotation = (yaw, pitch)
         res.updateOnGround = onGround
         res.updateAgainstWall = pushingWall
         return res
@@ -535,7 +535,7 @@ class HandleResponse:
         self.updateUsername: str = None
         self.updateUUID: bytes = None
         self.updatePosition: tuple[float, float, float] = None # x, y, z
-        self.updateRoation: tuple[float, float] = None # yaw, pitch
+        self.updateRotation: tuple[float, float] = None # yaw, pitch
         self.updateOnGround: bool = None
         self.updateAgainstWall: bool = None
         self.updateSprinting: bool = None
@@ -592,7 +592,7 @@ def decodePacket(data: bytes, connState: ConnectionState) -> tuple[bytes, Packet
     if len(data) <= 0: return (data, None) # No bytes... We can't do anything that that!
     offset = 0
     packetLength, bytesRead = dataTypes.readVarInt(data[offset:]) # len of packetId + dataBytes
-    if (len(data) - offset) < packetLength: return (data, None) # We haven't read enough bytes!
+    if len(data) < bytesRead+packetLength: return (data, None) # We haven't read enough bytes!
 
     offset += bytesRead
     packetId, bytesRead = dataTypes.readVarInt(data[offset:])
@@ -618,7 +618,7 @@ def decodePacket(data: bytes, connState: ConnectionState) -> tuple[bytes, Packet
     for packetType in packetClasses:
         packet = packetType(dataBytes)
         if (packet.boundDirection != "ServerBound") or (packet.id != packetId):
-            # Either we're not serverbound or the packet IDs don't match up! Either way it's the wrong packet
+            # Either we're not server bound or the packet IDs don't match up! Either way it's the wrong packet
             packet = None # make sure we clear the packet else it could lead to a false positive
             continue
         break # all good, break to continue

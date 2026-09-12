@@ -6,9 +6,7 @@ from enumValues import *
 from Registry import Registry, SyncedRegistry, TagsPacketForSyncedRegistry
 
 import os
-import json
-import io
-import nbtlib
+import threading
 import random
 import requests
 
@@ -44,24 +42,27 @@ class Client:
         self.pitch: float = 0
         self.onGround = False
         self.gamemode: GAMEMODE = "NULL"
+        self.loadedChunkCoords: list[tuple[int, int]] = []
 
+        #   Movement states
         self.isSprinting = False
         self.isElytraGliding = False
         self.isFlying = False # flying like creative mode, not via elytra
 
+        #   Permissions
         self.isAllowedToFly = True
         self.isInvulnerable = False
         self.canInstaBreakBlocks = False
         self.opLevel = 4 # 0 to 4 inclusive
 
-        self.isUnsignedplayerPropertiesFromAPI: bool = False
+        self.isUnsignedPlayerPropertiesFromAPI: bool = False
         self.playerPropertiesFromAPI: list[dict[str, str]] = [] # list of properties from the mojang api for our player. eg textures & capes
 
         # Special numbers that can tick up, keep track of these
-        #self.playerEntityId: int = dataTypes.readInt(random.randbytes(4))[0] # ramdom 4 byte EID
         self.playerEntityId: int = World.allocateEntityId()
         self.teleportId: int = random.randint(1, 999)
 
+        # Connection stuff
         self.state: packets.ConnectionState = "HANDSHAKING"
         self.socketData: bytes = bytes()
         self.unhandledPackets: list[packets.Packet] = []
@@ -80,8 +81,10 @@ class Client:
             self.UUID = packetResponse.updateUUID
             self.generatePlayerPropertiesFromAPI() # now that we have the UUID fetch it's data from mojang servers
             
-        if packetResponse.updatePosition != None: self.posX, self.posY, self.posZ = packetResponse.updatePosition
-        if packetResponse.updateRoation != None: self.yaw, self.pitch = packetResponse.updateRoation
+        if packetResponse.updatePosition != None:
+            self.posX, self.posY, self.posZ = packetResponse.updatePosition
+            World.sendChunksInView(self)
+        if packetResponse.updateRotation != None: self.yaw, self.pitch = packetResponse.updateRotation
         if packetResponse.updateOnGround != None: self.onGround = packetResponse.updateOnGround
         if packetResponse.updateAgainstWall != None: pass # dont care abt it rn
         if packetResponse.updateSprinting != None: self.isSprinting = packetResponse.updateSprinting
@@ -104,7 +107,7 @@ class Client:
         if self.UUID == None: return
 
         uuidString = "".join([ hex(b).split("0x")[1].zfill(2) for b in self.UUID ])
-        r = requests.get(f"https://sessionserver.mojang.com/session/minecraft/profile/{uuidString}?unsigned={self.isUnsignedplayerPropertiesFromAPI}")
+        r = requests.get(f"https://sessionserver.mojang.com/session/minecraft/profile/{uuidString}?unsigned={self.isUnsignedPlayerPropertiesFromAPI}")
         self.playerPropertiesFromAPI = r.json()["properties"]
 
     def getNextPacket(self):
@@ -121,8 +124,6 @@ class Client:
                 self.handlePacketReturn(response)
             except Exception as e:
                 raise e
-                #self.queuedOutboundPackets = None # the thread will see this is None and end the connection
-                pass
 
     def readInBytes(self, newData: bytes):
         self.socketData += newData
@@ -134,7 +135,7 @@ class Client:
         out += dataTypes.writeString(self.username)
         out += dataTypes.writeVarInt( len(self.playerPropertiesFromAPI) )
         for property in self.playerPropertiesFromAPI:
-            isSigned = not self.isUnsignedplayerPropertiesFromAPI
+            isSigned = not self.isUnsignedPlayerPropertiesFromAPI
             out += dataTypes.writeString(property["name"])
             out += dataTypes.writeString(property["value"])
             out += dataTypes.writeBoolean( isSigned )
@@ -171,7 +172,6 @@ class Client:
             brandPluginMessagePacket, featureFlagsPacket, knownDatapacksPacket
         ])
 
-
     def generateAndSendRegistryData(self):
         queuedRegisters = Registry._neededSyncedRegistries
         for register in queuedRegisters:
@@ -180,7 +180,6 @@ class Client:
             packetData = syncedReg.getPacketData()
             registryPacket = packets.RegistryData_ClientBound(packetData)
             self.queuedOutboundPackets.append( registryPacket )
-         
 
         # registry tags
         updateTagsPacketData = TagsPacketForSyncedRegistry.getPacketData()

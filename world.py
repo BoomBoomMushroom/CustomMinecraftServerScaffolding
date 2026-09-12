@@ -282,33 +282,48 @@ class World:
         ])
 
         # send chunks to player after we've queued the packets above
-        chunkSendThread = threading.Thread(target=cls.sendChunksInView, args=(client,), daemon=True)
-        chunkSendThread.start()
+        #chunkSendThread = threading.Thread(target=cls.sendChunksInView, args=(client,), daemon=True)
+        #chunkSendThread.start()
 
     @classmethod
     def sendChunksInView(cls, client: Client):
-        playerChunkX = client.posX // 16
-        playerChunkZ = client.posZ // 16
+        playerChunkX = int(client.posX // 16)
+        playerChunkZ = int(client.posZ // 16)
 
-        halfRenderDist = 2
+        halfRenderDist = 3
         #halfRenderDist = cls.renderDistance//2
         #halfRenderDist = cls.renderDistance
 
         def sendChunk(client: Client, x: int, z: int):
-            chunkX = playerChunkX + x
-            chunkZ = playerChunkZ + z
+            chunkX = x
+            chunkZ = z
             cls.loadRegionFileFromChunkCoords(chunkX, chunkZ)
             region: Region = cls.getRegionFromChunkCoords(chunkX, chunkZ)
 
             chunk: Chunk = region.getChunk(chunkX, chunkZ)
             chunkUpdateData = chunk.getChunkPacketData()
+            if len(chunkUpdateData) == 0: return # no data to return, probably an unfinished/ungenerated chunk :(
             chunkUpdatePacket = packets.LevelChunkWithLight_ClientBound(chunkUpdateData)
             client.queuedOutboundPackets.append(chunkUpdatePacket)
 
-        for x in range(-halfRenderDist, halfRenderDist):
-            for z in range(-halfRenderDist, halfRenderDist):
-                threadX = threading.Thread(target=sendChunk, args=(client,x,z), daemon=True)
-                threadX.start()
+        # get a list of unloaded chunks
+        chunkCoordsToSend = []
+        for dx in range(-halfRenderDist, halfRenderDist):
+            for dz in range(-halfRenderDist, halfRenderDist):
+                x = playerChunkX + dx
+                z = playerChunkZ + dz
+                if (x,z) in client.loadedChunkCoords: continue # already loaded, skip it
+                chunkCoordsToSend.append((x,z))
+        # sort it so the closest chunks are started threaded first
+        chunkCoordsToSend.sort(key=lambda _: math.dist(_, (playerChunkX, playerChunkZ)))
+        
+        # load in the new chunks
+        for x,z in chunkCoordsToSend:
+            print("\t",x,z)
+            threadX = threading.Thread(target=sendChunk, args=(client,x,z), daemon=True)
+            threadX.start()
+        
+        client.loadedChunkCoords.extend(chunkCoordsToSend)
 
     @classmethod
     def sendPacketToAllPlayers(cls, packet: packets.Packet):
@@ -328,20 +343,11 @@ class World:
     def tick(cls):
         cls.time += 1
 
-        # TODO: make the ping packet into a keepalive packet, thats what the vanilla server uses
-        # send a ping packet ( https://minecraft.wiki/w/Java_Edition_protocol/Packets#Ping ) every 5 seconds or so
+        # send a keep alive packet every 5 seconds or so
         if cls.time % (5*cls.tickRate) == 0:
             for plr in cls.players:
                 keepAlivePacket = packets.KeepAlive_ClientBound( random.randbytes(8) ) # 8 bytes for a random long
                 plr.queuedOutboundPackets.append(keepAlivePacket)
-
-        if cls.time % 5 == 0:
-            bid = Registry.getRegistryData("minecraft:block", "minecraft:stone")
-            bu = bytes()
-            bu += dataTypes.writePosition(18, 64, 18)
-            bu += dataTypes.writeVarInt(bid)
-            buPacket = packets.BlockUpdate_ClientBound(bu)
-            #cls.sendPacketToAllPlayers(buPacket)
 
 
 
