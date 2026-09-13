@@ -5,7 +5,7 @@ import nbtlib
 import io
 import time
 
-import dataTypes
+from dataTypes import PacketDataWriter, PacketDataReader
 from ServerSettings import ServerSettings
 
 class TagsPacketForSyncedRegistry:
@@ -44,7 +44,7 @@ class TagsPacketForSyncedRegistry:
                     fs = filenames
                 tagFiles.extend(fs)
             #tagFiles = [f for f in os.listdir(path) if os.path.isfile(os.path.join(path, f))]
-            tagObjects: list[bytes] = []
+            tagObjects: list[PacketDataWriter] = []
 
             while len(tagFiles) > 0:
                 tagFile = tagFiles.pop(0)
@@ -95,28 +95,28 @@ class TagsPacketForSyncedRegistry:
                     continue
 
                 # If we're here our tag is done has been processed
-                tagObject: bytes = bytes()
-                tagObject += dataTypes.writeIdentifier(tagIdentifier)
-                tagObject += dataTypes.writeVarInt(len(totalTagIndexes))
+                tagObject = PacketDataWriter()
+                tagObject.writeIdentifier(tagIdentifier)
+                tagObject.writeVarInt(len(totalTagIndexes))
                 for idx in totalTagIndexes:
-                    tagObject += dataTypes.writeVarInt(idx)
+                    tagObject.writeVarInt(idx)
 
                 tagObjects.append(tagObject)
 
             if skipTagRegister: continue
 
             # All tags processed have been processed
-            entryBytes: bytes = bytes()
-            entryBytes += dataTypes.writeIdentifier(f"minecraft:{tagRegister}")
-            entryBytes += dataTypes.writeVarInt(len(tagObjects))
+            entryBytes = PacketDataWriter()
+            entryBytes.writeIdentifier(f"minecraft:{tagRegister}")
+            entryBytes.writeVarInt(len(tagObjects))
             for tagObj in tagObjects:
-                entryBytes += tagObj
+                entryBytes.writeRawBytes(tagObj)
             taggedRegistersEntries.append(entryBytes)
 
-        updateTagsPacketData = bytes()
-        updateTagsPacketData += dataTypes.writeVarInt(len(taggedRegistersEntries))
+        updateTagsPacketData = PacketDataWriter()
+        updateTagsPacketData.writeVarInt(len(taggedRegistersEntries))
         for taggedReg in taggedRegistersEntries:
-            updateTagsPacketData += taggedReg
+            updateTagsPacketData.writeRawBytes(taggedReg)
 
         cls.packetData = updateTagsPacketData
         cls.isGenerating = False
@@ -204,13 +204,13 @@ class SyncedRegistry:
     def getPacketData(self) -> bytes:
         self.waitUntilLoaded()
 
-        packetData = bytes()
-        packetData += dataTypes.writeIdentifier(self.namespace) # registry id
-        packetData += dataTypes.writeVarInt(len(self.entries)) # lenth of entries array
+        packetData = PacketDataWriter()
+        packetData.writeIdentifier(self.namespace) # registry id
+        packetData.writeVarInt(len(self.entries)) # lenth of entries array
         for entry in self.entries:
-            packetData += dataTypes.writeIdentifier(entry) # name of the entry (already prefixed w/ "minecraft:")
-            packetData += dataTypes.writeBoolean(True) # yes we have nbt data
-            packetData += self.entriesToNBTBytes[entry] # the nbt entry data
+            packetData.writeIdentifier(entry) # name of the entry (already prefixed w/ "minecraft:")
+            packetData.writeBoolean(True) # yes we have nbt data
+            packetData.writeRawBytes(self.entriesToNBTBytes[entry]) # the nbt entry data
 
         return packetData
 

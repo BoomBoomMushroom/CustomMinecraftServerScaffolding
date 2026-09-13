@@ -6,6 +6,21 @@ class PacketDataWriter:
     def __init__(self):
         self.data: bytes = bytes()
     
+    def __len__(self):
+        return len(self.data)
+    
+    def __iadd__(self, other):
+        if type(other) == PacketDataWriter:
+            self.data += other.data
+        elif type(other) == bytes:
+            self.data += other
+        else:
+            raise ArithmeticError(f"Cannot add type {type(other)} to PackerDataWriter!")
+
+        return self
+    
+    def writeRawBytes(self, data: bytes):
+        self.__iadd__(data) # automatically handles PacketDataWriters being written
     def writeBitSet(self, bitSet: BitSet): self.data += writeBitSet(bitSet)
     def writeVarInt(self, value): self.data += writeVarInt(value)
     def writeVarLong(self, value): self.data += writeVarLong(value)
@@ -30,10 +45,21 @@ class PacketDataReader:
     def __init__(self, data: bytes):
         self.data = data
     
+    def __len__(self):
+        return len(self.data)
+    
     def afterRead(self, bytesRead):
         # push out the old data to set up for the next read
-        self.data = self.data[bytesRead]
+        self.data = self.data[bytesRead:]
     
+    def readNBytes(self, n: int) -> bytes:
+        out = self.data[:n]
+        self.afterRead(n)
+        return out
+    def readUUID(self):
+        out, bytesRead = readUUID(self.data)
+        self.afterRead(bytesRead)
+        return out
     def readVarInt(self):
         out, bytesRead = readVarInt(self.data)
         self.afterRead(bytesRead)
@@ -143,6 +169,9 @@ def writeBitSet(bitSet: BitSet) -> bytes:
     for long in longs: outBytes += writeLong(long)
     return outBytes
 
+# UUID
+def readUUID(data: bytes) -> tuple[bytes, int]:
+    return (data[:16], 16)
 
 # Var Ints
 def readVarInt(data: bytes) -> tuple[int, int]: # value, bytesRead

@@ -4,15 +4,14 @@ import math
 import threading
 import random
 
-import dataTypes
 from dataTypes import PacketDataReader, PacketDataWriter
 from ServerSettings import ServerSettings
 import packets
 from enumValues import *
 from RegionFiles import Region, Chunk
 from Registry import Registry, TagsPacketForSyncedRegistry
+from Entity import Entity
 if TYPE_CHECKING: from client import Client # import only for type checking
-if TYPE_CHECKING: from Entity import Entity
 
 
 
@@ -83,39 +82,39 @@ class World:
         ServerSettings.playersOnline = len(cls.players.keys())
 
         # login packet
-        playData: bytes = bytes()
-        playData += dataTypes.writeInt(client.entityId) # player entity id, EID
-        playData += dataTypes.writeBoolean(cls.isHardcore) # is hardcore
-        playData += dataTypes.writeVarInt(3) # all dimension names, 3 for how many dimension names we're giving
-        playData += dataTypes.writeIdentifier("minecraft:overworld")
-        playData += dataTypes.writeIdentifier("minecraft:nether")
-        playData += dataTypes.writeIdentifier("minecraft:the_end")
-        playData += dataTypes.writeVarInt(0) # max players, used to draw tablist but now ignored
-        playData += dataTypes.writeVarInt(cls.renderDistance) # render distance (2-32)
-        playData += dataTypes.writeVarInt(cls.simulationDistance) # simulation dist
-        playData += dataTypes.writeBoolean(False) # reduced debug info (false for development)
-        playData += dataTypes.writeBoolean(ServerSettings.gameRules.doImmediateRespawn==False) # enable respawn screen
-        playData += dataTypes.writeBoolean(ServerSettings.gameRules.doLimitedCrafting) # do limited crafting (unused by client)
-        playData += dataTypes.writeVarInt( Registry.getSyncedRegistry("minecraft:dimension_type").getEntryIndex(f"minecraft:{client.dimension}") ) # dimension type
-        playData += dataTypes.writeIdentifier(f"minecraft:{client.dimension}") # dimension name
-        playData += dataTypes.writeLong(0) # hashed seed, first 8 bytes of it TODO make it take cls.seed and hash it and shi
-        playData += dataTypes.writeUnsignedByte(GAMEMODE_Enum[client.gamemode]) # game mode
-        playData += dataTypes.writeByte(GAMEMODE_Enum["NULL"]) # previous gamemode, used for F3+F4. Same as above just -1 is null
-        playData += dataTypes.writeBoolean(False) # is debug world
-        playData += dataTypes.writeBoolean(False) # is superflat world
-        playData += dataTypes.writeBoolean(False) # has death location. makes the next 2 fields present
-        #playData += dataTypes.writeIdentifier("minecraft:overworld") # last death dimension name
-        #playData += dataTypes.writePosition(fill it out here) # last death pos
-        playData += dataTypes.writeVarInt(0) # portal cooldown in ticks
-        playData += dataTypes.writeVarInt(cls.worldSeaLevel) # sea level
-        playData += dataTypes.writeBoolean(False) # online mode
-        playData += dataTypes.writeBoolean(False) # enforces secure chat
+        playData = PacketDataWriter()
+        playData.writeInt(client.entityId) # player entity id, EID
+        playData.writeBoolean(cls.isHardcore) # is hardcore
+        playData.writeVarInt(3) # all dimension names, 3 for how many dimension names we're giving
+        playData.writeIdentifier("minecraft:overworld")
+        playData.writeIdentifier("minecraft:nether")
+        playData.writeIdentifier("minecraft:the_end")
+        playData.writeVarInt(0) # max players, used to draw tablist but now ignored
+        playData.writeVarInt(cls.renderDistance) # render distance (2-32)
+        playData.writeVarInt(cls.simulationDistance) # simulation dist
+        playData.writeBoolean(False) # reduced debug info (false for development)
+        playData.writeBoolean(ServerSettings.gameRules.doImmediateRespawn==False) # enable respawn screen
+        playData.writeBoolean(ServerSettings.gameRules.doLimitedCrafting) # do limited crafting (unused by client)
+        playData.writeVarInt( Registry.getSyncedRegistry("minecraft:dimension_type").getEntryIndex(f"minecraft:{client.dimension}") ) # dimension type
+        playData.writeIdentifier(f"minecraft:{client.dimension}") # dimension name
+        playData.writeLong(0) # hashed seed, first 8 bytes of it TODO make it take cls.seed and hash it and shi
+        playData.writeUnsignedByte(GAMEMODE_Enum[client.gamemode]) # game mode
+        playData.writeByte(GAMEMODE_Enum["NULL"]) # previous gamemode, used for F3+F4. Same as above just -1 is null
+        playData.writeBoolean(False) # is debug world
+        playData.writeBoolean(False) # is superflat world
+        playData.writeBoolean(False) # has death location. makes the next 2 fields present
+        #playData.writeIdentifier("minecraft:overworld") # last death dimension name
+        #playData.writePosition(fill it out here) # last death pos
+        playData.writeVarInt(0) # portal cooldown in ticks
+        playData.writeVarInt(cls.worldSeaLevel) # sea level
+        playData.writeBoolean(False) # online mode
+        playData.writeBoolean(False) # enforces secure chat
         playPacket = packets.Login_ClientBound(playData)
 
         # change difficulty packet
-        changeDiffData = bytes()
-        changeDiffData += dataTypes.writeUnsignedByte( DIFFICULTY_Enum[cls.difficulty] )
-        changeDiffData += dataTypes.writeBoolean(cls.difficultyLocked)
+        changeDiffData = PacketDataWriter()
+        changeDiffData.writeUnsignedByte( DIFFICULTY_Enum[cls.difficulty] )
+        changeDiffData.writeBoolean(cls.difficultyLocked)
         changeDiffPacket = packets.ChangeDifficulty_ClientBound(changeDiffData)
 
         # player abilities packet
@@ -129,23 +128,23 @@ class World:
         if client.isAllowedToFly: abilitiesFlagsVal |= 0x4
         if client.canInstaBreakBlocks: abilitiesFlagsVal |= 0x8
 
-        playerAbilitiesData = bytes()
-        playerAbilitiesData += dataTypes.writeByte(abilitiesFlagsVal)
-        playerAbilitiesData += dataTypes.writeFloat(0.05) # flying speed (default = 0.05)
-        playerAbilitiesData += dataTypes.writeFloat(0.1) # fov modifier (default is 0.1?) check https://minecraft.wiki/w/Java_Edition_protocol/Packets#Player_Abilities_(clientbound)
+        playerAbilitiesData = PacketDataWriter()
+        playerAbilitiesData.writeByte(abilitiesFlagsVal)
+        playerAbilitiesData.writeFloat(0.05) # flying speed (default = 0.05)
+        playerAbilitiesData.writeFloat(0.1) # fov modifier (default is 0.1?) check https://minecraft.wiki/w/Java_Edition_protocol/Packets#Player_Abilities_(clientbound)
         playerAbilitiesPacket = packets.PlayerAbilities_ClientBound(playerAbilitiesData)
 
         # set held item packet
-        heldSlotData = bytes()
-        heldSlotData += dataTypes.writeVarInt(0) # slow which the player has selected (0-8)
+        heldSlotData = PacketDataWriter()
+        heldSlotData.writeVarInt(0) # slow which the player has selected (0-8)
         heldSlotPacket = packets.SetHeldSlot_ClientBound(heldSlotData)
 
         # update recipes packet
         
         # entity event packet | for the OP permission level
-        entityEventData = bytes()
-        entityEventData += dataTypes.writeInt( client.entityId ) # Entity ID
-        entityEventData += dataTypes.writeByte(24 + client.opLevel) # 24->28 = op level 0->4 respectivly
+        entityEventData = PacketDataWriter()
+        entityEventData.writeInt( client.entityId ) # Entity ID
+        entityEventData.writeByte(24 + client.opLevel) # 24->28 = op level 0->4 respectivly
         entityEventPacket = packets.EntityEvent_ClientBound(entityEventData)
 
         # commands packet
@@ -153,18 +152,18 @@ class World:
         # update recipe book packet
         
         # synchronize player position packet
-        ppcbData: bytes = bytes()
+        ppcbData: bytes = PacketDataWriter()
         client.teleportId += 1
-        ppcbData += dataTypes.writeVarInt(client.teleportId) # teleport id, will be used to confirm in confirm teleport packet
-        ppcbData += dataTypes.writeDouble(client.posX) # X
-        ppcbData += dataTypes.writeDouble(client.posY) # Y
-        ppcbData += dataTypes.writeDouble(client.posZ) # Z
-        ppcbData += dataTypes.writeDouble(client.velX) # Vx
-        ppcbData += dataTypes.writeDouble(client.velY) # Vy
-        ppcbData += dataTypes.writeDouble(client.velZ) # Vz
-        ppcbData += dataTypes.writeFloat(client.yaw) # yaw, in degrees
-        ppcbData += dataTypes.writeFloat(client.pitch) # pitch, in degrees
-        ppcbData += dataTypes.writeInt(0) # teleport flags (https://minecraft.wiki/w/Java_Edition_protocol/Packets#Teleport_Flags)
+        ppcbData.writeVarInt(client.teleportId) # teleport id, will be used to confirm in confirm teleport packet
+        ppcbData.writeDouble(client.posX) # X
+        ppcbData.writeDouble(client.posY) # Y
+        ppcbData.writeDouble(client.posZ) # Z
+        ppcbData.writeDouble(client.velX) # Vx
+        ppcbData.writeDouble(client.velY) # Vy
+        ppcbData.writeDouble(client.velZ) # Vz
+        ppcbData.writeFloat(client.yaw) # yaw, in degrees
+        ppcbData.writeFloat(client.pitch) # pitch, in degrees
+        ppcbData.writeInt(0) # teleport flags (https://minecraft.wiki/w/Java_Edition_protocol/Packets#Teleport_Flags)
         ppcb = packets.PlayerPosition_ClientBound(ppcbData)
 
         # server data (the MOTD and icon)
@@ -184,92 +183,92 @@ class World:
             if action == "UpdateHat": bitToSet = 0x80
             piuActionsFlag |= bitToSet
 
-        piuData = bytes()
-        piuData += dataTypes.writeUnsignedByte(piuActionsFlag)
-        piuData += dataTypes.writeVarInt( len(cls.players.keys()) )
+        piuData = PacketDataWriter()
+        piuData.writeUnsignedByte(piuActionsFlag)
+        piuData.writeVarInt( len(cls.players.keys()) )
         for player in cls.players.values():
-            piuData += player.UUID
+            piuData.writeRawBytes(player.UUID)
             # MUST be in this order im like 99.9% certain of it
             if piuActionsFlag & 0x01 == 0x01:
                 # Add player
-                piuData += player.getGameProfile(ignoreUUID=True)
+                piuData.writeRawBytes(player.getGameProfile(ignoreUUID=True))
             if piuActionsFlag & 0x02 == 0x02:
                 # Init chat
                 pass # gonna skip this one since im not doing chat encryption right now
             if piuActionsFlag & 0x04 == 0x04:
                 # Game Mode
-                piuData += dataTypes.writeVarInt( GAMEMODE_Enum[player.gamemode] )
+                piuData.writeVarInt( GAMEMODE_Enum[player.gamemode] )
             if piuActionsFlag & 0x08 == 0x08:
                 # Listed in tab list
-                piuData += dataTypes.writeBoolean(True)
+                piuData.writeBoolean(True)
             if piuActionsFlag & 0x10 == 0x10:
                 # Ping in ms
-                piuData += dataTypes.writeVarInt(0)
+                piuData.writeVarInt(0)
             if piuActionsFlag & 0x20 == 0x20:
                 # Display name
                 pass # idk how to work with TextComponents so ill skip it for now
             if piuActionsFlag & 0x40 == 0x40:
                 # List priority
-                piuData += dataTypes.writeVarInt(0)
+                piuData.writeVarInt(0)
             if piuActionsFlag & 0x80 == 0x80:
                 # is hat visible
-                piuData += dataTypes.writeBoolean(True) # true for now, why not
+                piuData.writeBoolean(True) # true for now, why not
 
         piuPacket = packets.PlayerInfoUpdate_ClientBound(piuData)
 
         # init world border
-        initWBData = bytes()
-        initWBData += dataTypes.writeDouble(cls.worldBorder["centerX"]) # center x
-        initWBData += dataTypes.writeDouble(cls.worldBorder["centerZ"]) # center z
-        initWBData += dataTypes.writeDouble(cls.worldBorder["diameter"]) # old diameter
-        initWBData += dataTypes.writeDouble(cls.worldBorder["diameter"]) # new diameter
-        initWBData += dataTypes.writeVarLong(0) # speed
-        initWBData += dataTypes.writeVarInt(29999984) # portal teleport boundary, usually 29999984
-        initWBData += dataTypes.writeVarInt(cls.worldBorder["warningBlocks"]) # warning blocks, in meters
-        initWBData += dataTypes.writeVarInt(0) # warning time, in seconds
+        initWBData = PacketDataWriter()
+        initWBData.writeDouble(cls.worldBorder["centerX"]) # center x
+        initWBData.writeDouble(cls.worldBorder["centerZ"]) # center z
+        initWBData.writeDouble(cls.worldBorder["diameter"]) # old diameter
+        initWBData.writeDouble(cls.worldBorder["diameter"]) # new diameter
+        initWBData.writeVarLong(0) # speed
+        initWBData.writeVarInt(29999984) # portal teleport boundary, usually 29999984
+        initWBData.writeVarInt(cls.worldBorder["warningBlocks"]) # warning blocks, in meters
+        initWBData.writeVarInt(0) # warning time, in seconds
         initWBPacket = packets.InitializeBorder_ClientBound(initWBData)
 
         # update time
-        setTimeData = bytes()
-        setTimeData += dataTypes.writeLong(cls.time) # world age
+        setTimeData = PacketDataWriter()
+        setTimeData.writeLong(cls.time) # world age
         setTimeClocks: list[str] = Registry.getSyncedRegistry("minecraft:world_clock").getEntries()
         print("\t\t", setTimeClocks)
-        setTimeData += dataTypes.writeVarInt(len(setTimeClocks)) # len of array of Clocks
+        setTimeData.writeVarInt(len(setTimeClocks)) # len of array of Clocks
         for clockRegId, identifier in enumerate(setTimeClocks):
-            setTimeData += dataTypes.writeVarInt(clockRegId) # clock registry id
-            setTimeData += dataTypes.writeVarLong(cls.time) # current time of the clock
-            setTimeData += dataTypes.writeFloat(0) # fractional part of the time in ticks (non-negative num less than 1)
-            setTimeData += dataTypes.writeFloat(1) # rate, in clock tick per client tick
+            setTimeData.writeVarInt(clockRegId) # clock registry id
+            setTimeData.writeVarLong(cls.time) # current time of the clock
+            setTimeData.writeFloat(0) # fractional part of the time in ticks (non-negative num less than 1)
+            setTimeData.writeFloat(1) # rate, in clock tick per client tick
         setTimePacket = packets.SetTime_ClientBound(setTimeData)
         # sending the time at 24000+ seems to auto modulos so we don't have to do it
         
         # set default spawn location (optional, "home" spawn,,, not where client will spawn in)
-        defaultSpawnData = bytes()
-        defaultSpawnData += dataTypes.writeIdentifier(cls.worldSpawn["dimension"]) # dimension
-        defaultSpawnData += dataTypes.writePosition(cls.worldSpawn["x"], cls.worldSpawn["y"], cls.worldSpawn["z"]) # pos
-        defaultSpawnData += dataTypes.writeFloat(cls.worldSpawn["yaw"]) # yaw
-        defaultSpawnData += dataTypes.writeFloat(cls.worldSpawn["pitch"]) # pitch
+        defaultSpawnData = PacketDataWriter()
+        defaultSpawnData.writeIdentifier(cls.worldSpawn["dimension"]) # dimension
+        defaultSpawnData.writePosition(cls.worldSpawn["x"], cls.worldSpawn["y"], cls.worldSpawn["z"]) # pos
+        defaultSpawnData.writeFloat(cls.worldSpawn["yaw"]) # yaw
+        defaultSpawnData.writeFloat(cls.worldSpawn["pitch"]) # pitch
         defaultSpawnPacket = packets.SetDefaultSpawnPosition_ClientBound(defaultSpawnData)
 
         # game event (for telling the client to wait for chunks)
-        gameEventData = bytes()
-        gameEventData += dataTypes.writeUnsignedByte(13) # event id, 13=start waiting for level chunks
-        gameEventData += dataTypes.writeFloat(0) # I don't think "start waiting for level chunks" needs this but ill put it here just in case
+        gameEventData = PacketDataWriter()
+        gameEventData.writeUnsignedByte(13) # event id, 13=start waiting for level chunks
+        gameEventData.writeFloat(0) # I don't think "start waiting for level chunks" needs this but ill put it here just in case
         gameEventPacket = packets.GameEvent_ClientBound(gameEventData)
 
         # set ticking state (sets the tickrate and if its frozen or not)
-        tickingStateData = bytes()
-        tickingStateData += dataTypes.writeFloat(cls.tickRate) # tick rate
-        tickingStateData += dataTypes.writeBoolean(cls.isTickFrozen) # is frozen?
+        tickingStateData = PacketDataWriter()
+        tickingStateData.writeFloat(cls.tickRate) # tick rate
+        tickingStateData.writeBoolean(cls.isTickFrozen) # is frozen?
         #tickingStatePacket = packets.TickingState_ClientBound(tickingStateData) # I have no idea why this fucks up the speed of the client's game, no matter the value I put. Im just gonan remove it for rn
 
         # set center chunk
         playerChunkX = client.posX // 16
         playerChunkZ = client.posZ // 16
 
-        setChunkCenterData = bytes()
-        setChunkCenterData += dataTypes.writeVarInt(playerChunkX) # chunk x
-        setChunkCenterData += dataTypes.writeVarInt(playerChunkZ) # chunk z
+        setChunkCenterData = PacketDataWriter()
+        setChunkCenterData.writeVarInt(playerChunkX) # chunk x
+        setChunkCenterData.writeVarInt(playerChunkZ) # chunk z
         setChunkCenterPacket = packets.SetChunkCacheCenter_ClientBound(setChunkCenterData)
 
         client.queuedOutboundPackets.extend([

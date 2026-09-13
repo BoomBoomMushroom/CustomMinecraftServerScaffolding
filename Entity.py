@@ -1,5 +1,3 @@
-from world import World
-
 from typing import Literal
 
 EntityTypes = Literal["NONE", "PLAYER"]

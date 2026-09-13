@@ -1,4 +1,5 @@
 import dataTypes
+from dataTypes import PacketDataWriter, PacketDataReader
 from ServerSettings import ServerSettings
 from enumValues import *
 from Registry import Registry
@@ -11,6 +12,10 @@ import json
 
 class Packet:
     def __init__(self, id: int, name: str, data: bytearray=bytearray(0), boundDir: BoundDirection="ServerBound", connState: ConnectionState="HANDSHAKING"):
+        if type(data) == dataTypes.PacketDataWriter:
+            # we forgot to use `.data` on it, do it here
+            data = data.data
+        
         self.id: int = id # ex 0x01
         self.name: str = name # ex. status_request
         self.data: bytearray = data # body of the packet, it's data
@@ -53,15 +58,11 @@ class Intention_ServerBound(Packet):
     def __init__(self, data = bytearray(0)):
         super().__init__(0x0, "intention", data, "ServerBound", "HANDSHAKING")
     def handle(self):
-        toConsumeData = self.data
-        protocolVersion, bytesRead = dataTypes.readVarInt(toConsumeData)
-        toConsumeData = toConsumeData[bytesRead:]
-        serverAddress, bytesRead = dataTypes.readString(toConsumeData)
-        toConsumeData = toConsumeData[bytesRead:]
-        serverPort, bytesRead = dataTypes.readUnsignedShort(toConsumeData)
-        toConsumeData = toConsumeData[bytesRead:]
-        intent, bytesRead = dataTypes.readVarInt(toConsumeData)
-        toConsumeData = toConsumeData[bytesRead:]
+        reader = PacketDataReader(self.data)
+        protocolVersion = reader.readVarInt()
+        serverAddress = reader.readString()
+        serverPort = reader.readUnsignedShort()
+        intent = reader.readVarInt()
         #print(protocolVersion, serverAddress, serverPort, intent)
 
         response = HandleResponse()
@@ -108,8 +109,8 @@ class PingRequest_ServerBound(Packet):
         super().__init__(0x1, "ping_request", data, "ServerBound", "STATUS")
     def handle(self):
         responseLong = round(time.time() * 1000)
-        responseBytes: bytes = bytes()
-        responseBytes += dataTypes.writeLong(responseLong)
+        responseBytes = PacketDataWriter()
+        responseBytes.writeLong(responseLong)
 
         response = HandleResponse()
         response.respondWithPackets.append(PongResponse_ClientBound( responseBytes ))
@@ -120,11 +121,9 @@ class Hello_ServerBound(Packet):
     def __init__(self, data = bytearray(0)):
         super().__init__(0x0, "hello", data, "ServerBound", "LOGIN")
     def handle(self):
-        consumeData = self.data
-        name, bytesRead = dataTypes.readString(consumeData)
-        consumeData = consumeData[bytesRead:]
-        UUID, bytesRead = (consumeData[:16], 16)
-        consumeData = consumeData[bytesRead:]
+        reader = PacketDataReader(self.data)
+        name = reader.readString()
+        UUID = reader.readUUID()
 
         #print(name, uuidString)
         response = HandleResponse()
@@ -154,32 +153,24 @@ class ClientInformation_ServerBound(Packet):
     def __init__(self, data = bytearray(0)):
         super().__init__(0x0, "client_information", data, "ServerBound", "CONFIGURATION")
     def handle(self):
-        toConsume = self.data
-        locale, bytesRead = dataTypes.readString(toConsume)
-        toConsume = toConsume[bytesRead:]
-        viewDist, bytesRead = (toConsume[0], 1)
-        toConsume = toConsume[bytesRead:]
-        chatMode, bytesRead = dataTypes.readVarInt(toConsume)
-        toConsume = toConsume[bytesRead:]
-        chatColors, bytesRead = (toConsume[0], 1)
-        toConsume = toConsume[bytesRead:]
-        displayedSkinParts, bytesRead = (toConsume[0], 1)
-        toConsume = toConsume[bytesRead:]
-        mainHand, bytesRead = dataTypes.readVarInt(toConsume)
-        toConsume = toConsume[bytesRead:]
-        enableTextFiltering, bytesRead = (toConsume[0], 1)
-        toConsume = toConsume[bytesRead:]
-        allowServerListings, bytesRead = (toConsume[0], 1)
-        toConsume = toConsume[bytesRead:]
-        particleStatus, bytesRead = dataTypes.readVarInt(toConsume)
-        toConsume = toConsume[bytesRead:]
+        reader = PacketDataReader(self.data)
+        locale = reader.readString()
+        viewDist = reader.readByte()
+        chatMode = reader.readVarInt()
+        chatColors = reader.readByte()
+        displayedSkinParts = reader.readByte()
+        mainHand = reader.readVarInt()
+        enableTextFiltering = reader.readByte()
+        allowServerListings = reader.readByte()
+        particleStatus = reader.readVarInt()
         print(locale, viewDist, chatMode, chatColors, displayedSkinParts, mainHand, enableTextFiltering, allowServerListings, particleStatus)
 
 class RegistryData_ClientBound(Packet):
     def __init__(self, data = bytearray(0)):
         super().__init__(0x7, "registry_data", data, "ClientBound", "CONFIGURATION")
     def __str__(self):
-        return super().__str__() + ", Register: " + dataTypes.readIdentifier(self.data)[0]
+        reader = PacketDataReader(self.data)
+        return super().__str__() + ", Register: " + reader.readIdentifier()
 
 class FinishConfiguration_ClientBound(Packet):
     def __init__(self, data = bytearray(0)):
@@ -203,8 +194,8 @@ class CustomPayload_ServerBound(Packet):
     def __init__(self, data = bytearray(0)):
         super().__init__(0x2, "custom_payload", data, "ServerBound", "CONFIGURATION")
     def handle(self):
-        channel, bytesRead = dataTypes.readIdentifier(self.data)
-        channelData = self.data[bytesRead:]
+        reader = PacketDataReader(self.data)
+        channel = reader.readIdentifier()
 
         # ehh idk how to really handle this and it really doesn't matter so im gonna ignore this
         return None
@@ -253,7 +244,8 @@ class AcceptTeleportation_ServerBound(Packet):
     def __init__(self, data = bytearray(0),):
         super().__init__(0x0, "accept_teleportation", data, "ServerBound", "PLAY")
     def handle(self):
-        teleportId = dataTypes.readVarInt(self.data)[0]
+        reader = PacketDataReader(self.data)
+        teleportId = reader.readVarInt()
         res = HandleResponse()
         res.teleportId = teleportId
 
@@ -262,14 +254,11 @@ class MovePlayerPos_ServerBound(Packet):
     def __init__(self, data = bytearray(0)):
         super().__init__(0x1E, "move_player_pos", data, "ServerBound", "PLAY")
     def handle(self):
-        toConsume = self.data
-        x, bytesRead = dataTypes.readDouble(toConsume)
-        toConsume = toConsume[bytesRead:]
-        feetY, bytesRead = dataTypes.readDouble(toConsume)
-        toConsume = toConsume[bytesRead:]
-        z, bytesRead = dataTypes.readDouble(toConsume)
-        toConsume = toConsume[bytesRead:]
-        flags, bytesRead = dataTypes.readByte(toConsume)
+        reader = PacketDataReader(self.data)
+        x = reader.readDouble()
+        feetY = reader.readDouble()
+        z = reader.readDouble()
+        flags = reader.readByte()
 
         onGround = (flags & 0x01) == 0x01
         pushingWall = (flags & 0x02) == 0x02
@@ -283,18 +272,13 @@ class MovePlayerPosRot_ServerBound(Packet):
     def __init__(self, data = bytearray(0)):
         super().__init__(0x1F, "move_player_pos_rot", data, "ServerBound", "PLAY")
     def handle(self):
-        toConsume = self.data
-        x, bytesRead = dataTypes.readDouble(toConsume)
-        toConsume = toConsume[bytesRead:]
-        feetY, bytesRead = dataTypes.readDouble(toConsume)
-        toConsume = toConsume[bytesRead:]
-        z, bytesRead = dataTypes.readDouble(toConsume)
-        toConsume = toConsume[bytesRead:]
-        yaw, bytesRead = dataTypes.readFloat(toConsume)
-        toConsume = toConsume[bytesRead:]
-        pitch, bytesRead = dataTypes.readFloat(toConsume)
-        toConsume = toConsume[bytesRead:]
-        flags, bytesRead = dataTypes.readByte(toConsume)
+        reader = PacketDataReader(self.data)
+        x = reader.readDouble()
+        feetY = reader.readDouble()
+        z = reader.readDouble()
+        yaw = reader.readFloat()
+        pitch = reader.readFloat()
+        flags = reader.readByte()
 
         onGround = (flags & 0x01) == 0x01
         pushingWall = (flags & 0x02) == 0x02
@@ -309,12 +293,10 @@ class MovePlayerRot_ServerBound(Packet):
     def __init__(self, data = bytearray(0)):
         super().__init__(0x20, "move_player_rot", data, "ServerBound", "PLAY")
     def handle(self):
-        toConsume = self.data
-        yaw, bytesRead = dataTypes.readFloat(toConsume)
-        toConsume = toConsume[bytesRead:]
-        pitch, bytesRead = dataTypes.readFloat(toConsume)
-        toConsume = toConsume[bytesRead:]
-        flags, bytesRead = dataTypes.readByte(toConsume)
+        reader = PacketDataReader(self.data)
+        yaw = reader.readFloat()
+        pitch = reader.readFloat()
+        flags = reader.readByte()
 
         onGround = (flags & 0x01) == 0x01
         pushingWall = (flags & 0x02) == 0x02
@@ -328,7 +310,8 @@ class MovePlayerStatusOnly_ServerBound(Packet):
     def __init__(self, data = bytearray(0)):
         super().__init__(0x21, "move_player_status_only", data, "ServerBound", "PLAY")
     def handle(self):
-        flags, bytesRead = dataTypes.readByte(self.data)
+        reader = PacketDataReader(self.data)
+        flags = reader.readByte()
 
         onGround = (flags & 0x01) == 0x01
         pushingWall = (flags & 0x02) == 0x02
@@ -343,7 +326,8 @@ class Swing_ServerBound(Packet):
     def __init__(self, data = bytearray(0)):
         super().__init__(0x3F, "swing", data, "ServerBound", "PLAY")
     def handle(self):
-        hand = dataTypes.readVarInt(self.data)[0]
+        reader = PacketDataReader(self.data)
+        hand = reader.readVarInt()
         isMainHand = (hand==0) # if false, used offhand
         
         shr = ServerHandleResponse()
@@ -355,7 +339,8 @@ class Attack_ServerBound(Packet):
     def __init__(self, data = bytearray(0)):
         super().__init__(0x1, "attack", data, "ServerBound", "PLAY")
     def handle(self):
-        recvEntityId, bytesRead = dataTypes.readVarInt(self.data)
+        reader = PacketDataReader(self.data)
+        recvEntityId = reader.readVarInt()
         
         shr = ServerHandleResponse()
         shr.type = "attack"
@@ -367,7 +352,8 @@ class PlayerInput_ServerBound(Packet):
     def __init__(self, data = bytearray(0)):
         super().__init__(0x2b, "player_input", data, "ServerBound", "PLAY")
     def handle(self):
-        flags, _ = dataTypes.readUnsignedByte(self.data)
+        reader = PacketDataReader(self.data)
+        flags = reader.readUnsignedByte()
         # these flags are used for minecart controls
         forward = flags & 0x01 == 0x01
         backward = flags & 0x02 == 0x02
@@ -382,13 +368,10 @@ class PlayerCommand_ServerBound(Packet):
     def __init__(self, data = bytearray(0)):
         super().__init__(0x2a, "player_command", data, "ServerBound", "PLAY")
     def handle(self):
-        toConsume: bytes = self.data
-        eid, bytesRead = dataTypes.readVarInt(toConsume)
-        toConsume = toConsume[bytesRead:]
-        actionId, bytesRead = dataTypes.readVarInt(toConsume)
-        toConsume = toConsume[bytesRead:]
-        jumpBoost, bytesRead = dataTypes.readVarInt(toConsume) # used for horse jump only (0-100 inclusive), else it is 0
-        toConsume = toConsume[bytesRead:]
+        reader = PacketDataReader(self.data)
+        eid = reader.readVarInt()
+        actionId = reader.readVarInt()
+        jumpBoost = reader.readVarInt() # used for horse jump only (0-100 inclusive), else it is 0
 
         response = HandleResponse()
         if actionId == 0:
@@ -421,7 +404,8 @@ class PlayerAbilities_ServerBound(Packet):
     def __init__(self, data = bytearray(0)):
         super().__init__(0x28, "player_abilities", data, "ServerBound", "PLAY")
     def handle(self):
-        flags, _ = dataTypes.readByte(self.data)
+        reader = PacketDataReader(self.data)
+        flags = reader.readByte()
         isFlying = flags & 0x02 == 0x02
         response = HandleResponse()
         response.updateFlying = isFlying
@@ -431,14 +415,11 @@ class PlayerAction_ServerBound(Packet):
     def __init__(self, data = bytearray(0)):
         super().__init__(0x29, "player_action", data, "ServerBound", "PLAY")
     def handle(self):
-        toConsume: bytes = self.data
-        status, bytesRead = dataTypes.readVarInt(toConsume)
-        toConsume = toConsume[bytesRead:]
-        location, bytesRead = dataTypes.readPosition(toConsume)
-        toConsume = toConsume[bytesRead:]
-        face, bytesRead = dataTypes.readByte(toConsume)
-        toConsume = toConsume[bytesRead:]
-        sequence, bytesRead = dataTypes.readVarInt(toConsume) # used to ack a block has been broken w/ that id
+        reader = PacketDataReader(self.data)
+        status = reader.readVarInt()
+        location = reader.readPosition()
+        face = reader.readByte()
+        sequence = reader.readVarInt() # used to ack a block has been broken w/ that id
 
         # face enum -> 0=-Y, 1=+Y, 2=-Z, 3=+Z, 4=-X, 5=+X
 
@@ -477,7 +458,8 @@ class ClientCommand_ServerBound(Packet):
     def __init__(self, data = bytearray(0)):
         super().__init__(0xc, "client_command", data, "ServerBound", "PLAY")
     def handle(self):
-        actionId, _ = dataTypes.readVarInt(self.data)
+        reader = PacketDataReader(self.data)
+        actionId = reader.readVarInt()
         
         shr = ServerHandleResponse()
         shr.type = "ClientCommand"
@@ -488,10 +470,9 @@ class ContainerButtonClick_ServerBound(Packet):
     def __init__(self, data = bytearray(0)):
         super().__init__(0x11, "container_button_click", data, "ServerBound", "PLAY")
     def handle(self):
-        toConsume = self.data
-        windowId, bytesRead = dataTypes.readVarInt(toConsume)
-        toConsume = toConsume[bytesRead:]
-        buttonId, _ = dataTypes.readVarInt(toConsume)
+        reader = PacketDataReader(self.data)
+        windowId = reader.readVarInt()
+        buttonId = reader.readVarInt()
         
         shr = ServerHandleResponse()
         shr.type = "ContainerButtonClick"
@@ -504,17 +485,12 @@ class ContainerClick_ServerBound(Packet):
     def __init__(self, data = bytearray(0)):
         super().__init__(0x12, "container_click", data, "ServerBound", "PLAY")
     def handle(self):
-        toConsume = self.data
-        windowId, bytesRead = dataTypes.readVarInt(toConsume)
-        toConsume = toConsume[bytesRead:]
-        stateId, _ = dataTypes.readVarInt(toConsume)
-        toConsume = toConsume[bytesRead:]
-        slot, _ = dataTypes.readShort(toConsume)
-        toConsume = toConsume[bytesRead:]
-        button, _ = dataTypes.readByte(toConsume)
-        toConsume = toConsume[bytesRead:]
-        mode, _ = dataTypes.readVarInt(toConsume)
-        toConsume = toConsume[bytesRead:]
+        reader = PacketDataReader(self.data)
+        windowId = reader.readVarInt()
+        stateId = reader.readVarInt()
+        slot = reader.readShort()
+        button = reader.readByte()
+        mode = reader.readVarInt()
         # 2 more things after this, array of changed slots, and carried item
         #   both use hashed slot which i haven't implemented this
         # todo: when this is implemented read them
@@ -535,12 +511,10 @@ class ContainerSlotStateChanged_ServerBound(Packet):
     def __init__(self, data = bytearray(0)):
         super().__init__(0x12, "container_slot_state_changed", data, "ServerBound", "PLAY")
     def handle(self):
-        toConsume = self.data
-        slotId, _ = dataTypes.readShort(toConsume)
-        toConsume = toConsume[bytesRead:]
-        windowId, bytesRead = dataTypes.readVarInt(toConsume)
-        toConsume = toConsume[bytesRead:]
-        state, _ = dataTypes.readBoolean(toConsume)
+        reader = PacketDataReader(self.data)
+        slotId = reader.readShort()
+        windowId = reader.readVarInt()
+        state = reader.readBoolean()
         
         shr = ServerHandleResponse()
         shr.type = "ContainerSlotStateChanged"
@@ -554,7 +528,8 @@ class ChatAck_ServerBound(Packet):
     def __init__(self, data = bytearray(0)):
         super().__init__(0x6, "chat_ack", data, "ServerBound", "PLAY")
     def handle(self):
-        messageCount, bytesRead = dataTypes.readVarInt(self.data)
+        reader = PacketDataReader(self.data)
+        messageCount = reader.readVarInt(self.data)
         # i dont think we really need to do anything here.
         # TODO: fact check this ^^
 
@@ -563,33 +538,22 @@ class Chat_ServerBound(Packet):
         super().__init__(0x9, "chat", data, "ServerBound", "PLAY")
     def handle(self):
         # https://minecraft.wiki/w/Java_Edition_protocol/Packets#Chat_Message
-        toConsume = self.data
-        message, bytesRead = dataTypes.readString(toConsume)
-        toConsume = toConsume[bytesRead:]
-        timestamp, bytesRead = dataTypes.readLong(toConsume)
-        toConsume = toConsume[bytesRead:]
-        salt, bytesRead = dataTypes.readLong(toConsume)
-        toConsume = toConsume[bytesRead:]
-        isSigPresent, bytesRead = dataTypes.readBoolean(toConsume)
-        toConsume = toConsume[bytesRead:]
+        reader = PacketDataReader(self.data)
+        message = reader.readString()
+        timestamp = reader.readLong()
+        salt = reader.readLong()
+        isSigPresent = reader.readBoolean()
         sigBytes: list[int] = []
         if isSigPresent:
-            length, bytesRead = dataTypes.readVarInt(toConsume) # should be 256
-            toConsume = toConsume[bytesRead:]
+            length = reader.readVarInt() # should be 256
             for i in range(0,length):
-                sigByte, bytesRead = dataTypes.readByte(toConsume)
-                toConsume = toConsume[bytesRead:]
-                sigBytes.__annotations__(sigByte)
-        msgCount = dataTypes.readVarInt(toConsume)
-        toConsume = toConsume[bytesRead:]
+                sigBytes.append( reader.readByte() )
+        msgCount = reader.readVarInt()
         # acknowledged is a 20 bit bitset aka 2.5 bytes, so 3 bytes need to be read
-        acknowledged1of3, bytesRead = dataTypes.readByte(toConsume)
-        toConsume = toConsume[bytesRead:]
-        acknowledged2of3, bytesRead = dataTypes.readByte(toConsume)
-        toConsume = toConsume[bytesRead:]
-        acknowledged3of3, bytesRead = dataTypes.readByte(toConsume)
-        toConsume = toConsume[bytesRead:]
-        checksum, bytesRead = dataTypes.readByte(toConsume)
+        acknowledged1of3 = reader.readByte()
+        acknowledged2of3 = reader.readByte()
+        acknowledged3of3 = reader.readByte()
+        checksum = reader.readByte()
         
         # message, timestamp, salt, sigBytes, msgCount, acknowledged1of3..., checksum
         shr = ServerHandleResponse()
@@ -605,31 +569,31 @@ class PlayerChat_ClientBound(Packet):
     @classmethod
     def write(cls, senderName: str, message: str, timestamp: int, salt: int, clientsRecvCt: int, clientsSendCt: int, senderUUID: bytes) -> PlayerChat_ClientBound:
         # https://minecraft.wiki/w/Java_Edition_protocol/Packets#Player_Chat_Message
-        data = bytes()
+        data = PacketDataWriter()
         
         # header
-        data += dataTypes.writeVarInt(clientsRecvCt) # global index, for something idr
-        data += senderUUID
-        data += dataTypes.writeVarInt(clientsSendCt) # index, somehow different than global index but im not 100% sure how
-        data += dataTypes.writeBoolean(False) # false, i dont wanna send message signature bytes
+        data.writeVarInt(clientsRecvCt) # global index, for something idr
+        data.writeRawBytes(senderUUID)
+        data.writeVarInt(clientsSendCt) # index, somehow different than global index but im not 100% sure how
+        data.writeBoolean(False) # false, i dont wanna send message signature bytes
         
         #body
-        data += dataTypes.writeString(message)
-        data += dataTypes.writeLong(timestamp)
-        data += dataTypes.writeLong(salt)
+        data.writeString(message)
+        data.writeLong(timestamp)
+        data.writeLong(salt)
         
         # idk some array
-        data += dataTypes.writeVarInt(0)
+        data.writeVarInt(0)
         
         # other
-        data += dataTypes.writeBoolean(False) # no "unsigned content" ig
-        data += dataTypes.writeVarInt(0) # filter type | 0=message not filtered, 1=message fully filtered, 2=message partially filtered
-        # data += ? # only write this if the filter type is partially filtered (2)
+        data.writeBoolean(False) # no "unsigned content" ig
+        data.writeVarInt(0) # filter type | 0=message not filtered, 1=message fully filtered, 2=message partially filtered
+        # data.? # only write this if the filter type is partially filtered (2)
         
         # chat formatting
-        data += dataTypes.writeVarInt( Registry.getSyncedRegistry("minecraft:chat_type").getEntryIndex("minecraft:chat")+1 ) # +1 because this is a type "ID or X"
-        data += dataTypes.writeTextComponentOnlyString(senderName)
-        data += dataTypes.writeBoolean(False) # im not sending a target name
+        data.writeVarInt( Registry.getSyncedRegistry("minecraft:chat_type").getEntryIndex("minecraft:chat")+1 ) # +1 because this is a type "ID or X"
+        data.writeTextComponentOnlyString(senderName)
+        data.writeBoolean(False) # im not sending a target name
         
         return PlayerChat_ClientBound(data)
 
@@ -647,10 +611,9 @@ class ChangeDifficulty_ServerBound(Packet):
     def __init__(self, data = bytearray(0)):
         super().__init__(0xA, "change_difficulty", data, "ServerBound", "PLAY")
     def handle(self):
-        toConsume = self.data
-        difficulty, bytesRead = dataTypes.readUnsignedByte(toConsume)
-        toConsume = toConsume[bytesRead:]
-        difficultyLocked, bytesRead = dataTypes.readBoolean(toConsume)
+        reader = PacketDataReader(self.data)
+        difficulty = reader.readUnsignedByte()
+        difficultyLocked = reader.readBoolean()
         
         shr = ServerHandleResponse()
         shr.type = "changeDifficulty"
@@ -662,11 +625,12 @@ class ChangeGamemode_ServerBound(Packet):
     def __init__(self, data = bytearray(0)):
         super().__init__(0x5, "change_game_mode", data, "ServerBound", "PLAY")
     def handle(self):
-        gamemode, bytesRead = dataTypes.readVarInt(self.data)
+        reader = PacketDataReader(self.data)
+        gamemode = reader.readVarInt(self.data)
         
         shr = ServerHandleResponse()
         shr.type = "changeGamemode"
-        shr.gamemode: GAMEMODE = GAMEMODE_EnumFrom[gamemode]
+        shr.gamemode: GAMEMODE = GAMEMODE_EnumFrom[gamemode] # type: ignore
         return shr
 
 
@@ -723,7 +687,8 @@ class Pong_ServerBound(Packet):
     def __init__(self, data = bytearray(0)):
         super().__init__(0x2D, "pong", data, "ServerBound", "PLAY")
     def handle(self):
-        pingId = dataTypes.readInt( self.data )[0]
+        reader = PacketDataReader(self.data)
+        pingId = reader.readInt()
         return # nothing else to do
 
 class KeepAlive_ClientBound(Packet):
@@ -733,26 +698,23 @@ class KeepAlive_ServerBound(Packet):
     def __init__(self, data = bytearray(0)):
         super().__init__(0x1C, "keep_alive", data, "ServerBound", "PLAY")
     def handle(self):
-        keepAliveId = dataTypes.readLong( self.data )[0]
+        reader = PacketDataReader(self.data)
+        keepAliveId = reader.readLong()
         return # nothing else to do
 
 class CookieResponse_ServerBound(Packet):
     def __init__(self, data = bytearray(0)):
         super().__init__(0x15, "cookie_response", data, "ServerBound", "PLAY")
     def handle(self):
-        toConsume = self.data
-        key, bytesRead = dataTypes.readIdentifier(toConsume)
-        toConsume = toConsume[bytesRead:]
-        hasData, bytesRead = dataTypes.readBoolean(toConsume)
-        toConsume = toConsume[bytesRead:]
+        reader = PacketDataReader(self.data)
+        key = reader.readIdentifier()
+        hasData = reader.readBoolean()
         cookieData: list[int] = [] # list of bytes
         if hasData:
             # max size of 5120B, or 5 KiB
-            length, bytesRead = dataTypes.readVarInt(toConsume)
-            toConsume = toConsume[bytesRead:]
+            length = reader.readVarInt()
             for i in range(0, length):
-                d, bytesRead = dataTypes.readByte(toConsume)
-                toConsume = toConsume[bytesRead:]
+                d = reader.readByte()
                 cookieData.append(d)
         
         shs = ServerHandleResponse()
@@ -783,7 +745,7 @@ class HandleResponse:
         # client todo flags:
         self.sendLoginFinishedPacket = False
         self.generateAndSendRegistryData = False
-        self.clientLoginToWorld = False
+        self.clientLoginToWorld = None
 
         # Info to know that something did happen
         self.teleportId: int = None
@@ -874,7 +836,42 @@ PLAY_PACKETS = [
     ConfigurationAcknowledge_ServerBound,
 ]
 
+def decodePacket2(data: bytes, connState: ConnectionState) -> tuple[bytes, Packet]:
+    reader = PacketDataReader(data)
+    if len(data) <= 0: return (data, None) # No bytes... We can't do anything with that!
+    
+    packetLength = reader.readVarInt()
+    if len(reader) < packetLength: return (data, None) # We haven't read in enough bytes from the socket for this full packet!
+    
+    packetId = reader.readVarInt()
+    dataBytes: bytes = reader.readNBytes(packetLength-1) # -1 b/c the packetId is included in the length
+    
+    packet: Packet = None
+    packetClasses = []
+    
+    if connState == "HANDSHAKING": packetClasses = HANDSHAKING_PACKETS
+    elif connState == "STATUS": packetClasses = STATUS_PACKETS
+    elif connState == "LOGIN": packetClasses = LOGIN_PACKETS
+    elif connState == "CONFIGURATION": packetClasses = CONFIGURATION_PACKETS
+    elif connState == "PLAY": packetClasses = PLAY_PACKETS
+
+    for packetType in packetClasses:
+        packet = packetType(dataBytes)
+        if (packet.boundDirection != "ServerBound") or (packet.id != packetId):
+            # Either we're not server bound or the packet IDs don't match up! Either way it's the wrong packet
+            packet = None # make sure we clear the packet else it could lead to a false positive
+            continue
+        break # all good, break to continue
+
+    if packet == None:
+        packetId = "0x" + (hex(packetId).split("0x")[1]).zfill(2)
+        print(f"{textColors.RED}Unknown packet state and or id! {packetId=} {connState=}{textColors.RESET}")
+
+    return (reader.data, packet)
+
 def decodePacket(data: bytes, connState: ConnectionState) -> tuple[bytes, Packet]:
+    return decodePacket2(data, connState)
+    
     if len(data) <= 0: return (data, None) # No bytes... We can't do anything that that!
     offset = 0
     packetLength, bytesRead = dataTypes.readVarInt(data[offset:]) # len of packetId + dataBytes

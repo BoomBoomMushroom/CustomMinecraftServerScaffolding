@@ -4,6 +4,7 @@ import io
 from typing import Literal, TYPE_CHECKING
 
 import dataTypes
+from dataTypes import PacketDataWriter, PacketDataReader
 from ServerSettings import ServerSettings
 from enumValues import *
 from Registry import Registry
@@ -97,12 +98,12 @@ class Chunk:
         skyLightBitset.append(False)
         blockLightBitset.append(False)
 
-        packetData = bytes()
-        packetData += dataTypes.writeInt(x) # chunk coord x
-        packetData += dataTypes.writeInt(z) # chunk coord z
-        packetData += dataTypes.writeVarInt(0) # 0 heightmap
+        packetData = PacketDataWriter()
+        packetData.writeInt(x) # chunk coord x
+        packetData.writeInt(z) # chunk coord z
+        packetData.writeVarInt(0) # 0 heightmap
 
-        sectionsData = bytes()
+        sectionsData = PacketDataWriter()
         for sec in nbt["sections"]:
             yBottom = sec["Y"] * 16 # the start y level, add 16 to get the top y level
             solidBlockCount = 16*16*16 # default if all stone
@@ -116,18 +117,18 @@ class Chunk:
             blockLightBitset.append(True)
             blockLightDatas.append([0b1111_1111] * 2048)
 
-            sectionsData += dataTypes.writeShort(solidBlockCount) # solid block count
-            sectionsData += dataTypes.writeShort(0) # fluid count, 0
+            sectionsData.writeShort(solidBlockCount) # solid block count
+            sectionsData.writeShort(0) # fluid count, 0
             # block data paletted
-            sectionsData += dataTypes.writeUnsignedByte(0) # bits per entry
-            sectionsData += dataTypes.writeVarInt(allBlockId) # block id
+            sectionsData.writeUnsignedByte(0) # bits per entry
+            sectionsData.writeVarInt(allBlockId) # block id
             # biome data paletted
-            sectionsData += dataTypes.writeUnsignedByte(0) # bits per entry
-            sectionsData += dataTypes.writeVarInt(0) # whatever biome is id 0
+            sectionsData.writeUnsignedByte(0) # bits per entry
+            sectionsData.writeVarInt(0) # whatever biome is id 0
             #print(sec, sec.keys())
             pass
-        packetData += dataTypes.writeVarInt(len(sectionsData))
-        packetData += sectionsData
+        packetData.writeVarInt(len(sectionsData))
+        packetData.writeRawBytes(sectionsData)
 
         # these are for the section 1 above the world max height (1 section above our highest section)
         skyLightBitset.append(False)
@@ -136,14 +137,14 @@ class Chunk:
         skyLightDatasRaw = [ dataTypes.writePrefixedUnsignedByteArray(arr) for arr in skyLightDatas ]
         blockLightDatasRaw = [ dataTypes.writePrefixedUnsignedByteArray(arr) for arr in blockLightDatas ]
 
-        packetData += dataTypes.writeVarInt(0) # 0 block entities
+        packetData.writeVarInt(0) # 0 block entities
         # light data vv
-        packetData += dataTypes.writeBitSet(skyLightBitset) # sky light bitset
-        packetData += dataTypes.writeBitSet(blockLightBitset) # block light bitset
-        packetData += dataTypes.writeBitSet(dataTypes.BitSet()) # bitset of empty sky light
-        packetData += dataTypes.writeBitSet(dataTypes.BitSet()) # bitset of empty block light
-        packetData += dataTypes.writePrefixedRawDataArray(skyLightDatasRaw) # sky light data arr
-        packetData += dataTypes.writePrefixedRawDataArray(blockLightDatasRaw) # block light data arr
+        packetData.writeBitSet(skyLightBitset) # sky light bitset
+        packetData.writeBitSet(blockLightBitset) # block light bitset
+        packetData.writeBitSet(dataTypes.BitSet()) # bitset of empty sky light
+        packetData.writeBitSet(dataTypes.BitSet()) # bitset of empty block light
+        packetData.writePrefixedRawDataArray(skyLightDatasRaw) # sky light data arr
+        packetData.writePrefixedRawDataArray(blockLightDatasRaw) # block light data arr
         return packetData
 
     def getChunkPacketData(self) -> bytes:
@@ -176,17 +177,17 @@ class Chunk:
         skyLightBitset.append(False)
         blockLightBitset.append(False)
 
-        packetData = bytes()
-        packetData += dataTypes.writeInt(x) # chunk coord x
-        packetData += dataTypes.writeInt(z) # chunk coord z
+        packetData = PacketDataWriter()
+        packetData.writeInt(x) # chunk coord x
+        packetData.writeInt(z) # chunk coord z
 
-        packetData += dataTypes.writeVarInt(len(chunkHeightmaps)) # length of heightmap array
+        packetData.writeVarInt(len(chunkHeightmaps)) # length of heightmap array
         for hmap in chunkHeightmaps:
-            packetData += dataTypes.writeVarInt( HEIGHTMAP_TYPE_Enum[hmap[0]] ) # type of heightmap
-            packetData += dataTypes.writeVarInt(len(hmap[1])) # length of long array
-            for long in hmap[1]: packetData += dataTypes.writeLong(long) # the longs IN the array
+            packetData.writeVarInt( HEIGHTMAP_TYPE_Enum[hmap[0]] ) # type of heightmap
+            packetData.writeVarInt(len(hmap[1])) # length of long array
+            for long in hmap[1]: packetData.writeLong(long) # the longs IN the array
 
-        sectionsData = bytes()
+        sectionsData = PacketDataWriter()
         for sec in nbt["sections"]:
             solidBlockCount = 16*16*16 # all blocks in the section are "filled"; so the chunk still rendered w/o counting up everything
             fluidBlockCount = 16*16*16
@@ -204,26 +205,26 @@ class Chunk:
                 return id
 
             def writePalettedContainer( refName: str, isBiome: bool=False, minBits: int=4, maxBits: int=8):
-                containerBytes = bytes()
+                containerBytes = PacketDataWriter()
                 palette = sec[refName]["palette"]
                 bitsMin = (len(palette) - 1).bit_length()
                 bitsPerEntry = max(bitsMin, minBits)
 
                 # if 1 then it is all one block/biome and we just say that
                 if len(palette) == 1:
-                    containerBytes += dataTypes.writeUnsignedByte(0) # bits per entry, 0=single valued
+                    containerBytes.writeUnsignedByte(0) # bits per entry, 0=single valued
                     paletteId = getPaletteEntryId(palette[0], isBiome)
-                    containerBytes += dataTypes.writeVarInt(paletteId)
+                    containerBytes.writeVarInt(paletteId)
                 else:
                     # Copy and paste the palette and the blocks list into the packet
-                    containerBytes += dataTypes.writeUnsignedByte(bitsPerEntry) # bits per entry
-                    containerBytes += dataTypes.writeVarInt(len(palette)) # length of the entries array
+                    containerBytes.writeUnsignedByte(bitsPerEntry) # bits per entry
+                    containerBytes.writeVarInt(len(palette)) # length of the entries array
                     for paletteEntry in palette:
                         entryId = getPaletteEntryId(paletteEntry, isBiome)
-                        containerBytes += dataTypes.writeVarInt(entryId)
+                        containerBytes.writeVarInt(entryId)
 
                     longData = sec[refName]["data"]
-                    for long in longData: containerBytes += dataTypes.writeLong(long)
+                    for long in longData: containerBytes.writeLong(long)
 
                 return containerBytes
 
@@ -233,15 +234,15 @@ class Chunk:
             blockLightBitset.append(True)
             blockLightDatas.append([0b1111_1111] * 2048)
 
-            sectionsData += dataTypes.writeShort(solidBlockCount) # solid block count
-            sectionsData += dataTypes.writeShort(fluidBlockCount) # fluid count
+            sectionsData.writeShort(solidBlockCount) # solid block count
+            sectionsData.writeShort(fluidBlockCount) # fluid count
             # block data paletted
-            sectionsData += writePalettedContainer("block_states")
+            sectionsData.writeRawBytes(writePalettedContainer("block_states"))
             # biome data paletted
-            sectionsData += writePalettedContainer("biomes", isBiome=True, minBits=1)
+            sectionsData.writeRawBytes(writePalettedContainer("biomes", isBiome=True, minBits=1))
             
-        packetData += dataTypes.writeVarInt(len(sectionsData))
-        packetData += sectionsData
+        packetData.writeVarInt(len(sectionsData))
+        packetData.writeRawBytes(sectionsData)
 
         # these are for the section 1 above the world max height (1 section above our highest section)
         skyLightBitset.append(False)
@@ -250,14 +251,14 @@ class Chunk:
         skyLightDatasRaw = [ dataTypes.writePrefixedUnsignedByteArray(arr) for arr in skyLightDatas ]
         blockLightDatasRaw = [ dataTypes.writePrefixedUnsignedByteArray(arr) for arr in blockLightDatas ]
 
-        packetData += dataTypes.writeVarInt(0) # 0 block entities
+        packetData.writeVarInt(0) # 0 block entities
         # light data vv
-        packetData += dataTypes.writeBitSet(skyLightBitset) # sky light bitset
-        packetData += dataTypes.writeBitSet(blockLightBitset) # block light bitset
-        packetData += dataTypes.writeBitSet(dataTypes.BitSet()) # bitset of empty sky light
-        packetData += dataTypes.writeBitSet(dataTypes.BitSet()) # bitset of empty block light
-        packetData += dataTypes.writePrefixedRawDataArray(skyLightDatasRaw) # sky light data arr
-        packetData += dataTypes.writePrefixedRawDataArray(blockLightDatasRaw) # block light data arr
+        packetData.writeBitSet(skyLightBitset) # sky light bitset
+        packetData.writeBitSet(blockLightBitset) # block light bitset
+        packetData.writeBitSet(dataTypes.BitSet()) # bitset of empty sky light
+        packetData.writeBitSet(dataTypes.BitSet()) # bitset of empty block light
+        packetData.writePrefixedRawDataArray(skyLightDatasRaw) # sky light data arr
+        packetData.writePrefixedRawDataArray(blockLightDatasRaw) # block light data arr
 
         self.cachedPacketData = packetData
         return packetData

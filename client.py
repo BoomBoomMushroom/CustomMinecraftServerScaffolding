@@ -1,5 +1,5 @@
 import packets
-import dataTypes
+from dataTypes import PacketDataWriter, PacketDataReader
 from ServerSettings import ServerSettings
 from world import World
 from enumValues import *
@@ -130,41 +130,41 @@ class Client(Entity):
         self.handlePackets()
 
     def getGameProfile(self, ignoreUUID=False) -> bytes:
-        out = bytes()
+        out = PacketDataWriter()
         if ignoreUUID == False: out += self.UUID
-        out += dataTypes.writeString(self.username)
-        out += dataTypes.writeVarInt( len(self.playerPropertiesFromAPI) )
+        out.writeString(self.username)
+        out.writeVarInt( len(self.playerPropertiesFromAPI) )
         for property in self.playerPropertiesFromAPI:
             isSigned = not self.isUnsignedPlayerPropertiesFromAPI
-            out += dataTypes.writeString(property["name"])
-            out += dataTypes.writeString(property["value"])
-            out += dataTypes.writeBoolean( isSigned )
-            if isSigned: out += dataTypes.writeString(property["signature"])
+            out.writeString(property["name"])
+            out.writeString(property["value"])
+            out.writeBoolean( isSigned )
+            if isSigned: out.writeString(property["signature"])
         return out
 
     def sendLoginFinishedPacket(self):
-        packetData: bytes = bytes()
-        packetData += self.getGameProfile()        
-        packetData += bytes(16) # Session ID (as a UUID) | I don't think it really matters so im making it all 0s for right now
+        packetData = PacketDataWriter()
+        packetData.writeRawBytes(self.getGameProfile())        
+        packetData.writeRawBytes(bytes(16)) # Session ID (as a UUID) | I don't think it really matters so im making it all 0s for right now
 
         self.queuedOutboundPackets.append(packets.LoginFinished_ClientBound(packetData))
 
     def generateAndSendConfigData(self):
-        brandPluginMessageData = bytes()
-        brandPluginMessageData += dataTypes.writeIdentifier("minecraft:brand")
-        brandPluginMessageData += dataTypes.writeString(ServerSettings.serverBrand)
+        brandPluginMessageData = PacketDataWriter()
+        brandPluginMessageData.writeIdentifier("minecraft:brand")
+        brandPluginMessageData.writeString(ServerSettings.serverBrand)
         brandPluginMessagePacket = packets.CustomPayload_ClientBound(brandPluginMessageData)
 
-        featureFlagsData = bytes()
-        featureFlagsData += dataTypes.writeVarInt(1) # how many identifiers after this?
-        featureFlagsData += dataTypes.writeIdentifier("minecraft:vanilla")
+        featureFlagsData = PacketDataWriter()
+        featureFlagsData.writeVarInt(1) # how many identifiers after this?
+        featureFlagsData.writeIdentifier("minecraft:vanilla")
         featureFlagsPacket = packets.UpdateEnabledFeatures_ClientBound(featureFlagsData)
 
-        knownDatapacksData = bytes()
-        knownDatapacksData += dataTypes.writeVarInt(1) # how many datapacks?
-        knownDatapacksData += dataTypes.writeString("minecraft") # namespace
-        knownDatapacksData += dataTypes.writeString("core") # pathname
-        knownDatapacksData += dataTypes.writeString(ServerSettings.version) # version of the pack
+        knownDatapacksData = PacketDataWriter()
+        knownDatapacksData.writeVarInt(1) # how many datapacks?
+        knownDatapacksData.writeString("minecraft") # namespace
+        knownDatapacksData.writeString("core") # pathname
+        knownDatapacksData.writeString(ServerSettings.version) # version of the pack
         knownDatapacksPacket = packets.SelectKnownPacks_ClientBound(knownDatapacksData)
 
 
