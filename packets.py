@@ -531,6 +531,23 @@ class ContainerClick_ServerBound(Packet):
         
         return shr
 
+class ContainerSlotStateChanged_ServerBound(Packet):
+    def __init__(self, data = bytearray(0)):
+        super().__init__(0x12, "container_slot_state_changed", data, "ServerBound", "PLAY")
+    def handle(self):
+        toConsume = self.data
+        slotId, _ = dataTypes.readShort(toConsume)
+        toConsume = toConsume[bytesRead:]
+        windowId, bytesRead = dataTypes.readVarInt(toConsume)
+        toConsume = toConsume[bytesRead:]
+        state, _ = dataTypes.readBoolean(toConsume)
+        
+        shr = ServerHandleResponse()
+        shr.type = "ContainerSlotStateChanged"
+        shr.slotId = slotId
+        shr.windowId = windowId
+        shr.slotState = state
+        return shr
 
 
 class ChatAck_ServerBound(Packet):
@@ -553,8 +570,7 @@ class Chat_ServerBound(Packet):
         toConsume = toConsume[bytesRead:]
         salt, bytesRead = dataTypes.readLong(toConsume)
         toConsume = toConsume[bytesRead:]
-        isSigPresentByte, bytesRead = dataTypes.readByte(toConsume)
-        isSigPresent = isSigPresentByte==0x01
+        isSigPresent, bytesRead = dataTypes.readBoolean(toConsume)
         toConsume = toConsume[bytesRead:]
         sigBytes: list[int] = []
         if isSigPresent:
@@ -595,7 +611,7 @@ class PlayerChat_ClientBound(Packet):
         data += dataTypes.writeVarInt(clientsRecvCt) # global index, for something idr
         data += senderUUID
         data += dataTypes.writeVarInt(clientsSendCt) # index, somehow different than global index but im not 100% sure how
-        data += bytes([0x00]) # false, i dont wanna send message signature bytes
+        data += dataTypes.writeBoolean(False) # false, i dont wanna send message signature bytes
         
         #body
         data += dataTypes.writeString(message)
@@ -606,14 +622,14 @@ class PlayerChat_ClientBound(Packet):
         data += dataTypes.writeVarInt(0)
         
         # other
-        data += bytes([0x00]) # false, no "unsigned content" ig
+        data += dataTypes.writeBoolean(False) # no "unsigned content" ig
         data += dataTypes.writeVarInt(0) # filter type | 0=message not filtered, 1=message fully filtered, 2=message partially filtered
         # data += ? # only write this if the filter type is partially filtered (2)
         
         # chat formatting
         data += dataTypes.writeVarInt( Registry.getSyncedRegistry("minecraft:chat_type").getEntryIndex("minecraft:chat")+1 ) # +1 because this is a type "ID or X"
         data += dataTypes.writeTextComponentOnlyString(senderName)
-        data += bytes([0x00]) # false, im not sending a target name
+        data += dataTypes.writeBoolean(False) # im not sending a target name
         
         return PlayerChat_ClientBound(data)
 
@@ -634,8 +650,7 @@ class ChangeDifficulty_ServerBound(Packet):
         toConsume = self.data
         difficulty, bytesRead = dataTypes.readUnsignedByte(toConsume)
         toConsume = toConsume[bytesRead:]
-        difficultyLockedByte, bytesRead = dataTypes.readByte(toConsume)
-        difficultyLocked = difficultyLockedByte==0x01
+        difficultyLocked, bytesRead = dataTypes.readBoolean(toConsume)
         
         shr = ServerHandleResponse()
         shr.type = "changeDifficulty"
@@ -721,6 +736,31 @@ class KeepAlive_ServerBound(Packet):
         keepAliveId = dataTypes.readLong( self.data )[0]
         return # nothing else to do
 
+class CookieResponse_ServerBound(Packet):
+    def __init__(self, data = bytearray(0)):
+        super().__init__(0x15, "cookie_response", data, "ServerBound", "PLAY")
+    def handle(self):
+        toConsume = self.data
+        key, bytesRead = dataTypes.readIdentifier(toConsume)
+        toConsume = toConsume[bytesRead:]
+        hasData, bytesRead = dataTypes.readBoolean(toConsume)
+        toConsume = toConsume[bytesRead:]
+        cookieData: list[int] = [] # list of bytes
+        if hasData:
+            # max size of 5120B, or 5 KiB
+            length, bytesRead = dataTypes.readVarInt(toConsume)
+            toConsume = toConsume[bytesRead:]
+            for i in range(0, length):
+                d, bytesRead = dataTypes.readByte(toConsume)
+                toConsume = toConsume[bytesRead:]
+                cookieData.append(d)
+        
+        shs = ServerHandleResponse()
+        shs.type = "CookieResponse"
+        shs.cookieKey = key
+        shs.cookieData = cookieData
+        return # nothing else to do
+
 
 # Extra classes
 class HandleResponse:
@@ -779,6 +819,12 @@ class ServerHandleResponse:
         self.mode: int = None
         self.arrOfChangedSlots: dict[int, None] = None # todo: make this a dict of {slot num: hashed slot data}
         self.carriedItem = None # todo: make this a hashed slot
+        # containerSlotStateChanged
+        self.slotId: int = None
+        self.slotState: bool = None
+        # cookieResponse
+        self.cookieKey: str = None
+        self.cookieData: list[int] = None
 
 
 # Decoding and other packet stuff
@@ -815,7 +861,7 @@ PLAY_PACKETS = [
     PlayerAction_ServerBound,
     ClientCommand_ServerBound,
     
-    ContainerButtonClick_ServerBound, ContainerClick_ServerBound,
+    ContainerButtonClick_ServerBound, ContainerClick_ServerBound, ContainerSlotStateChanged_ServerBound,
     
     ChatAck_ServerBound,
     Chat_ServerBound,

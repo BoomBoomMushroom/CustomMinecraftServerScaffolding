@@ -2,6 +2,97 @@ import struct
 import re
 # For format strings for (un)packing check here: https://docs.python.org/3/library/struct.html#struct-format-strings
 
+class PacketDataWriter:
+    def __init__(self):
+        self.data: bytes = bytes()
+    
+    def writeBitSet(self, bitSet: BitSet): self.data += writeBitSet(bitSet)
+    def writeVarInt(self, value): self.data += writeVarInt(value)
+    def writeVarLong(self, value): self.data += writeVarLong(value)
+    def writeString(self, toWrite): self.data += writeString(toWrite)
+    def writeTextComponentOnlyString(self, data): self.data += writeTextComponentOnlyString(data)
+    def writeUnsignedByte(self, value): self.data += writeUnsignedByte(value)
+    def writeByte(self, value): self.data += writeByte(value)
+    def writePrefixedByteArray(self, values): self.data += writePrefixedByteArray(values)
+    def writePrefixedUnsignedByteArray(self, values): self.data += writePrefixedUnsignedByteArray(values)
+    def writePrefixedRawDataArray(self, values): self.data += writePrefixedRawDataArray(values)
+    def writeUnsignedShort(self, value): self.data += writeUnsignedShort(value)
+    def writeShort(self, value): self.data += writeShort(value)
+    def writeInt(self, value): self.data += writeInt(value)
+    def writeLong(self, value): self.data += writeLong(value)
+    def writeFloat(self, value): self.data += writeFloat(value)
+    def writeDouble(self, value): self.data += writeDouble(value)
+    def writeBoolean(self, value): self.data += writeBoolean(value)
+    def writeIdentifier(self, identifier): self.data += writeIdentifier(identifier)
+    def writePosition(self, x, y, z): self.data += writePosition(x, y, z)
+
+class PacketDataReader:
+    def __init__(self, data: bytes):
+        self.data = data
+    
+    def afterRead(self, bytesRead):
+        # push out the old data to set up for the next read
+        self.data = self.data[bytesRead]
+    
+    def readVarInt(self):
+        out, bytesRead = readVarInt(self.data)
+        self.afterRead(bytesRead)
+        return out
+    def readVarLong(self):
+        out, bytesRead = readVarLong(self.data)
+        self.afterRead(bytesRead)
+        return out
+    def readString(self):
+        out, bytesRead = readString(self.data)
+        self.afterRead(bytesRead)
+        return out
+    def readUnsignedByte(self):
+        out, bytesRead = readUnsignedByte(self.data)
+        self.afterRead(bytesRead)
+        return out
+    def readByte(self):
+        out, bytesRead = readByte(self.data)
+        self.afterRead(bytesRead)
+        return out
+    def readUnsignedShort(self):
+        out, bytesRead = readUnsignedShort(self.data)
+        self.afterRead(bytesRead)
+        return out
+    def readShort(self):
+        out, bytesRead = readShort(self.data)
+        self.afterRead(bytesRead)
+        return out
+    def readInt(self):
+        out, bytesRead = readInt(self.data)
+        self.afterRead(bytesRead)
+        return out
+    def readLong(self):
+        out, bytesRead = readLong(self.data)
+        self.afterRead(bytesRead)
+        return out
+    def readFloat(self):
+        out, bytesRead = readFloat(self.data)
+        self.afterRead(bytesRead)
+        return out
+    def readDouble(self):
+        out, bytesRead = readDouble(self.data)
+        self.afterRead(bytesRead)
+        return out
+    def readBoolean(self):
+        out, bytesRead = readBoolean(self.data)
+        self.afterRead(bytesRead)
+        return out
+    def readIdentifier(self):
+        out, bytesRead = readIdentifier(self.data)
+        self.afterRead(bytesRead)
+        return out
+    def readPosition(self):
+        out, bytesRead = readPosition(self.data)
+        self.afterRead(bytesRead)
+        return out
+
+
+
 class BytesReader:
     def __init__(self, data: bytes, startPos: int=0):
         self.data = data
@@ -51,6 +142,7 @@ def writeBitSet(bitSet: BitSet) -> bytes:
     outBytes += writeVarInt(len(longs))
     for long in longs: outBytes += writeLong(long)
     return outBytes
+
 
 # Var Ints
 def readVarInt(data: bytes) -> tuple[int, int]: # value, bytesRead
@@ -191,6 +283,9 @@ def readDouble(data: bytes) -> tuple[float, int]:
 def writeBoolean(value: bool) -> bytes:
     if value == True: return bytes([0x01])
     else: return bytes([0x00])
+
+def readBoolean(data: bytes) -> tuple[bool, int]:
+    return (data[0]==0x01, 1)
 
 # identifiers
 def readIdentifier(data: bytes) -> tuple[str, int]:

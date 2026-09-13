@@ -5,6 +5,7 @@ import threading
 import random
 
 import dataTypes
+from dataTypes import PacketDataReader, PacketDataWriter
 from ServerSettings import ServerSettings
 import packets
 from enumValues import *
@@ -394,6 +395,17 @@ class World:
             carriedItem = packetResponse.carriedItem
             
             # todo: implement this
+        elif responseType == "ContainerSlotStateChanged":
+            slotId = packetResponse.slotId
+            windowId = packetResponse.windowId
+            slotState = packetResponse.slotState
+            
+            # todo: this is used only for a crafter. So (un)lock that slot
+        elif responseType == "CookieResponse":
+            key = packetResponse.cookieKey
+            data = packetResponse.cookieData
+            
+            # todo: uhh idk what we'd do with this. forward this to whatever requested the cookies
         
         pass
 
