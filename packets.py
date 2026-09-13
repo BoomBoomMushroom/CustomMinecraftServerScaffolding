@@ -166,6 +166,13 @@ class LoginFinished_ClientBound(Packet):
     def __init__(self, data = bytearray(0)):
         super().__init__(0x2, "login_finished", data, "ClientBound", "LOGIN")
 
+    @classmethod
+    def write(self, gameProfile, sessionUUID):
+        packetData = PacketDataWriter()
+        packetData.writeRawBytes(gameProfile)
+        packetData.writeRawBytes(sessionUUID) # Session ID (as a UUID)
+        return LoginFinished_ClientBound(packetData)
+
 # Configuration packets
 class ClientInformation_ServerBound(Packet):
     def __init__(self, data = bytearray(0)):

@@ -150,11 +150,11 @@ class Client(Entity):
         return out
 
     def sendLoginFinishedPacket(self):
-        packetData = PacketDataWriter()
-        packetData.writeRawBytes(self.getGameProfile())        
-        packetData.writeRawBytes(bytes(16)) # Session ID (as a UUID) | I don't think it really matters so im making it all 0s for right now
-
-        self.queuedOutboundPackets.append(packets.LoginFinished_ClientBound(packetData))
+        loginFinishedPacket = packets.LoginFinished_ClientBound.write(
+            gameProfile=self.getGameProfile(),
+            sessionUUID=bytes(16) # I don't think this really matters so im making it all 0s for right now
+        )
+        self.queuedOutboundPackets.append(loginFinishedPacket)
 
     def generateAndSendConfigData(self):
         brandPluginMessageData = PacketDataWriter()
