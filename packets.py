@@ -50,6 +50,9 @@ class Packet:
         print(self.data)
         raise NotImplementedError(f"`handle` not implemented on main Packet class, make an override for: {self.__str__()}")
 
+    def write(self) -> Packet:
+        raise NotImplementedError(f"`write` not implemented on main Packet class, make an override for: {self.__str__()}")
+
     def __str__(self):
         idHex = "0x" + (hex(self.id).split("0x")[1]).zfill(2)
 
@@ -233,7 +236,7 @@ class Login_ClientBound(Packet):
     def write(cls,
         eid, isHardcore, dimensions, maxPlayers, renderDist, simDist, reducedDebugInfo,
         enableRespawnScreen, doLimitedCrafting, playerDimensionIdentifier, seedHash,
-        gameMode, prevGameMode, isDebugWorld, isSuperflat, hasDeathLoc, lastDeathDim, lastDeathPos,
+        gameMode: GAMEMODE, prevGameMode: GAMEMODE, isDebugWorld, isSuperflat, hasDeathLoc, lastDeathDim, lastDeathPos,
         portalCooldown, seaLevel, isOnlineMode, enforcesSecureChat
     ):
         playData = PacketDataWriter()
@@ -253,8 +256,8 @@ class Login_ClientBound(Packet):
         ) # dimension type id from the registry
         playData.writeIdentifier(playerDimensionIdentifier) # dimension name
         playData.writeLong(seedHash) # hashed seed, first 8 bytes of it
-        playData.writeUnsignedByte(gameMode) # game mode
-        playData.writeByte(prevGameMode) # previous gamemode, used for F3+F4. Same as above just -1 is null
+        playData.writeUnsignedByte(GAMEMODE_Enum[gameMode]) # game mode
+        playData.writeByte(GAMEMODE_Enum[prevGameMode]) # previous gamemode, used for F3+F4. Same as above just -1 is null
         playData.writeBoolean(isDebugWorld) # is debug world
         playData.writeBoolean(isSuperflat) # is superflat world
         playData.writeBoolean(hasDeathLoc) # has death location. makes the next 2 fields present
@@ -660,6 +663,12 @@ class BlockUpdate_ClientBound(Packet):
 class ChangeDifficulty_ClientBound(Packet):
     def __init__(self, data = bytearray(0)):
         super().__init__(0xA, "change_difficulty", data, "ClientBound", "PLAY")
+
+    @classmethod
+    def write(cls, difficulty: DIFFICULTY, difficultyLocked):
+        changeDiffData = PacketDataWriter()
+        changeDiffData.writeUnsignedByte( DIFFICULTY_Enum[difficulty] )
+        changeDiffData.writeBoolean(difficultyLocked)
 
 class ChangeDifficulty_ServerBound(Packet):
     def __init__(self, data = bytearray(0)):

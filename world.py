@@ -88,17 +88,14 @@ class World:
             maxPlayers=ServerSettings.maxPlayers, renderDist=cls.renderDistance, simDist=cls.simulationDistance,
             reducedDebugInfo=False, enableRespawnScreen=(ServerSettings.gameRules.doImmediateRespawn==False),
             doLimitedCrafting=ServerSettings.gameRules.doLimitedCrafting, playerDimensionIdentifier="minecraft:overworld",
-            seedHash=0, gameMode=GAMEMODE_Enum[client.gamemode], prevGameMode=GAMEMODE_Enum["NULL"], isDebugWorld=False,
+            seedHash=0, gameMode=client.gamemode, prevGameMode="NULL", isDebugWorld=False,
             isSuperflat=False, hasDeathLoc=False, lastDeathDim="minecraft:overworld", lastDeathPos=(0,0,0),
             portalCooldown=0, seaLevel=cls.worldSeaLevel, isOnlineMode=False, enforcesSecureChat=False
         )
         # TODO: make it take cls.seed and hash it and shi (first 8 bytes is what we pass, aka 1 long)
 
         # change difficulty packet
-        changeDiffData = PacketDataWriter()
-        changeDiffData.writeUnsignedByte( DIFFICULTY_Enum[cls.difficulty] )
-        changeDiffData.writeBoolean(cls.difficultyLocked)
-        changeDiffPacket = packets.ChangeDifficulty_ClientBound(changeDiffData)
+        changeDiffPacket = packets.ChangeDifficulty_ClientBound.write(cls.difficulty, cls.difficultyLocked)
 
         # player abilities packet
         # flagsVal |= 0x1 # if player is invulnerable
