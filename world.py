@@ -82,34 +82,17 @@ class World:
         ServerSettings.playersOnline = len(cls.players.keys())
 
         # login packet
-        playData = PacketDataWriter()
-        playData.writeInt(client.entityId) # player entity id, EID
-        playData.writeBoolean(cls.isHardcore) # is hardcore
-        playData.writeVarInt(3) # all dimension names, 3 for how many dimension names we're giving
-        playData.writeIdentifier("minecraft:overworld")
-        playData.writeIdentifier("minecraft:nether")
-        playData.writeIdentifier("minecraft:the_end")
-        playData.writeVarInt(0) # max players, used to draw tablist but now ignored
-        playData.writeVarInt(cls.renderDistance) # render distance (2-32)
-        playData.writeVarInt(cls.simulationDistance) # simulation dist
-        playData.writeBoolean(False) # reduced debug info (false for development)
-        playData.writeBoolean(ServerSettings.gameRules.doImmediateRespawn==False) # enable respawn screen
-        playData.writeBoolean(ServerSettings.gameRules.doLimitedCrafting) # do limited crafting (unused by client)
-        playData.writeVarInt( Registry.getSyncedRegistry("minecraft:dimension_type").getEntryIndex(f"minecraft:{client.dimension}") ) # dimension type
-        playData.writeIdentifier(f"minecraft:{client.dimension}") # dimension name
-        playData.writeLong(0) # hashed seed, first 8 bytes of it TODO make it take cls.seed and hash it and shi
-        playData.writeUnsignedByte(GAMEMODE_Enum[client.gamemode]) # game mode
-        playData.writeByte(GAMEMODE_Enum["NULL"]) # previous gamemode, used for F3+F4. Same as above just -1 is null
-        playData.writeBoolean(False) # is debug world
-        playData.writeBoolean(False) # is superflat world
-        playData.writeBoolean(False) # has death location. makes the next 2 fields present
-        #playData.writeIdentifier("minecraft:overworld") # last death dimension name
-        #playData.writePosition(fill it out here) # last death pos
-        playData.writeVarInt(0) # portal cooldown in ticks
-        playData.writeVarInt(cls.worldSeaLevel) # sea level
-        playData.writeBoolean(False) # online mode
-        playData.writeBoolean(False) # enforces secure chat
-        playPacket = packets.Login_ClientBound(playData)
+        
+        playPacket = packets.Login_ClientBound.write(
+            eid=client.entityId, isHardcore=cls.isHardcore, dimensions=["minecraft:overworld", "minecraft:nether", "minecraft:the_end"],
+            maxPlayers=ServerSettings.maxPlayers, renderDist=cls.renderDistance, simDist=cls.simulationDistance,
+            reducedDebugInfo=False, enableRespawnScreen=(ServerSettings.gameRules.doImmediateRespawn==False),
+            doLimitedCrafting=ServerSettings.gameRules.doLimitedCrafting, playerDimensionIdentifier="minecraft:overworld",
+            seedHash=0, gameMode=GAMEMODE_Enum[client.gamemode], prevGameMode=GAMEMODE_Enum["NULL"], isDebugWorld=False,
+            isSuperflat=False, hasDeathLoc=False, lastDeathDim="minecraft:overworld", lastDeathPos=(0,0,0),
+            portalCooldown=0, seaLevel=cls.worldSeaLevel, isOnlineMode=False, enforcesSecureChat=False
+        )
+        # TODO: make it take cls.seed and hash it and shi (first 8 bytes is what we pass, aka 1 long)
 
         # change difficulty packet
         changeDiffData = PacketDataWriter()

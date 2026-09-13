@@ -1,4 +1,3 @@
-import dataTypes
 from dataTypes import PacketDataWriter, PacketDataReader
 from ServerSettings import ServerSettings
 from enumValues import *
@@ -12,7 +11,7 @@ import json
 
 class Packet:
     def __init__(self, id: int, name: str, data: bytearray=bytearray(0), boundDir: BoundDirection="ServerBound", connState: ConnectionState="HANDSHAKING"):
-        if type(data) == dataTypes.PacketDataWriter:
+        if type(data) == PacketDataWriter:
             # we forgot to use `.data` on it, do it here
             data = data.data
         
@@ -28,11 +27,14 @@ class Packet:
 
     def getRawBytes(self) -> bytes:
         if self.fullPacketData != None: return self.fullPacketData
-        packetIdVarIntBytes: bytes = dataTypes.writeVarInt(self.id)
-        packetLength = len(packetIdVarIntBytes) + len(self.data)
-        lengthVarIntBytes: bytes = dataTypes.writeVarInt( packetLength )
+        packetIdWriter = PacketDataWriter()
+        packetIdWriter.writeVarInt(self.id)
+        
+        packetLength = len(packetIdWriter) + len(self.data)
+        lengthVarWriter = PacketDataWriter()
+        lengthVarWriter.writeVarInt( packetLength )
 
-        self.fullPacketData: bytes = lengthVarIntBytes + packetIdVarIntBytes + self.data
+        self.fullPacketData: bytes = lengthVarWriter.data + packetIdWriter.data + self.data
 
         return self.fullPacketData
 
@@ -75,29 +77,41 @@ class Intention_ServerBound(Packet):
 class StatusResponse_ClientBound(Packet):
     def __init__(self, data = bytearray(0)):
         super().__init__(0x0, "status_response", data, "ClientBound", "STATUS")
+    
+    @classmethod
+    def write(cls, versionName, protocolId, maxPlayers, playerOnline, samplePlayerPool, motd, favicon, usesSecureChat):
+        responseJson = {
+            "version": {
+                "name": versionName,
+                "protocol": protocolId
+            },
+            "player": {
+                "max": maxPlayers,
+                "online": playerOnline,
+                "sample": samplePlayerPool
+            },
+            "description": {
+                "text": motd
+            },
+            "favicon": favicon,
+            "enforcesSecureChat": usesSecureChat
+        }
+        data = PacketDataWriter()
+        data.writeString(json.dumps(responseJson))
+        return StatusResponse_ClientBound(data)
+        
 class StatusRequest_ServerBound(Packet):
     def __init__(self, data = bytearray(0)):
         super().__init__(0x0, "status_request", data, "ServerBound", "STATUS")
     def handle(self):
-        responseJson = {
-            "version": {
-                "name": ServerSettings.version,
-                "protocol": ServerSettings.protocol
-            },
-            "player": {
-                "max": ServerSettings.maxPlayers,
-                "online": ServerSettings.playersOnline,
-                "sample": []
-            },
-            "description": {
-                "text": ServerSettings.motd
-            },
-            "favicon": ServerSettings.serverIcon,
-            "enforcesSecureChat": False
-        }
-        jsonBytes = dataTypes.writeString(json.dumps(responseJson))
+        srPacket = StatusResponse_ClientBound.write(
+            ServerSettings.version, ServerSettings.protocol,
+            ServerSettings.maxPlayers, ServerSettings.playersOnline, [],
+            ServerSettings.motd, ServerSettings.serverIcon, False
+        )
+        
         responseOut = HandleResponse()
-        responseOut.respondWithPackets.append( StatusResponse_ClientBound(jsonBytes) )
+        responseOut.respondWithPackets.append( srPacket )
 
         return responseOut
 
@@ -214,6 +228,46 @@ class SelectKnownPacks_ClientBound(Packet):
 class Login_ClientBound(Packet):
     def __init__(self, data = bytearray(0)):
         super().__init__(0x31, "login", data, "ClientBound", "PLAY")
+    
+    @classmethod
+    def write(cls,
+        eid, isHardcore, dimensions, maxPlayers, renderDist, simDist, reducedDebugInfo,
+        enableRespawnScreen, doLimitedCrafting, playerDimensionIdentifier, seedHash,
+        gameMode, prevGameMode, isDebugWorld, isSuperflat, hasDeathLoc, lastDeathDim, lastDeathPos,
+        portalCooldown, seaLevel, isOnlineMode, enforcesSecureChat
+    ):
+        playData = PacketDataWriter()
+        playData.writeInt(eid) # player entity id, EID
+        playData.writeBoolean(isHardcore) # is hardcore
+        playData.writeVarInt(len(dimensions))
+        for dim in dimensions:
+            playData.writeIdentifier(dim)
+        playData.writeVarInt(maxPlayers) # max players, used to draw tablist but now ignored
+        playData.writeVarInt(renderDist) # render distance (2-32)
+        playData.writeVarInt(simDist) # simulation dist
+        playData.writeBoolean(reducedDebugInfo) # reduced debug info (false for development)
+        playData.writeBoolean(enableRespawnScreen) # enable respawn screen
+        playData.writeBoolean(doLimitedCrafting) # do limited crafting (unused by client)
+        playData.writeVarInt(
+            Registry.getSyncedRegistry("minecraft:dimension_type").getEntryIndex(playerDimensionIdentifier)
+        ) # dimension type id from the registry
+        playData.writeIdentifier(playerDimensionIdentifier) # dimension name
+        playData.writeLong(seedHash) # hashed seed, first 8 bytes of it
+        playData.writeUnsignedByte(gameMode) # game mode
+        playData.writeByte(prevGameMode) # previous gamemode, used for F3+F4. Same as above just -1 is null
+        playData.writeBoolean(isDebugWorld) # is debug world
+        playData.writeBoolean(isSuperflat) # is superflat world
+        playData.writeBoolean(hasDeathLoc) # has death location. makes the next 2 fields present
+        if hasDeathLoc:
+            playData.writeIdentifier(lastDeathDim) # last death dimension name
+            playData.writePosition(*lastDeathPos) # last death pos, use `*` to expand it out into x, y, and z
+        playData.writeVarInt(portalCooldown) # portal cooldown in ticks
+        playData.writeVarInt(seaLevel) # sea level
+        playData.writeBoolean(isOnlineMode) # online mode
+        playData.writeBoolean(enforcesSecureChat) # enforces secure chat
+        
+        return Login_ClientBound(playData)
+
 class ClientTickEnd_ServerBound(Packet):
     def __init__(self, data = bytearray(0)):
         super().__init__(0x0d, "client_tick_end", data, "ServerBound", "PLAY")
@@ -721,7 +775,7 @@ class CookieResponse_ServerBound(Packet):
         shs.type = "CookieResponse"
         shs.cookieKey = key
         shs.cookieData = cookieData
-        return # nothing else to do
+        return shs
 
 
 # Extra classes
@@ -836,7 +890,7 @@ PLAY_PACKETS = [
     ConfigurationAcknowledge_ServerBound,
 ]
 
-def decodePacket2(data: bytes, connState: ConnectionState) -> tuple[bytes, Packet]:
+def decodePacket(data: bytes, connState: ConnectionState) -> tuple[bytes, Packet]:
     reader = PacketDataReader(data)
     if len(data) <= 0: return (data, None) # No bytes... We can't do anything with that!
     
@@ -868,50 +922,6 @@ def decodePacket2(data: bytes, connState: ConnectionState) -> tuple[bytes, Packe
         print(f"{textColors.RED}Unknown packet state and or id! {packetId=} {connState=}{textColors.RESET}")
 
     return (reader.data, packet)
-
-def decodePacket(data: bytes, connState: ConnectionState) -> tuple[bytes, Packet]:
-    return decodePacket2(data, connState)
-    
-    if len(data) <= 0: return (data, None) # No bytes... We can't do anything that that!
-    offset = 0
-    packetLength, bytesRead = dataTypes.readVarInt(data[offset:]) # len of packetId + dataBytes
-    if len(data) < bytesRead+packetLength: return (data, None) # We haven't read enough bytes!
-
-    offset += bytesRead
-    packetId, bytesRead = dataTypes.readVarInt(data[offset:])
-    offset += bytesRead
-
-    endIndex = offset+packetLength-1 # minus 1 to not read one extra byte since packetId is included in that length
-    dataBytes = data[offset : endIndex]
-    offset += packetLength-1
-
-    # packetLength, packetId, dataBytes
-    returnRemainingBytes = data[endIndex:] # everything after the data
-    packet: Packet = None
-
-    #print(packetLength, packetId, dataBytes, data)
-    packetClasses = []
-
-    if connState == "HANDSHAKING": packetClasses = HANDSHAKING_PACKETS
-    elif connState == "STATUS": packetClasses = STATUS_PACKETS
-    elif connState == "LOGIN": packetClasses = LOGIN_PACKETS
-    elif connState == "CONFIGURATION": packetClasses = CONFIGURATION_PACKETS
-    elif connState == "PLAY": packetClasses = PLAY_PACKETS
-
-    for packetType in packetClasses:
-        packet = packetType(dataBytes)
-        if (packet.boundDirection != "ServerBound") or (packet.id != packetId):
-            # Either we're not server bound or the packet IDs don't match up! Either way it's the wrong packet
-            packet = None # make sure we clear the packet else it could lead to a false positive
-            continue
-        break # all good, break to continue
-
-    if packet == None:
-        packetId = "0x" + (hex(packetId).split("0x")[1]).zfill(2)
-        print(f"{textColors.RED}Unknown packet state and or id! {packetId=} {connState=}{textColors.RESET}")
-
-    return (returnRemainingBytes, packet)
-
 
 def printCompletionOfPackets():
     allPackets: dict[str, dict[str,dict[str,int]]] = None # protocol: {cb/sb: {name: {protocol_id: id}}}

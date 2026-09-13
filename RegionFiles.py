@@ -3,7 +3,7 @@ import zlib
 import io
 from typing import Literal, TYPE_CHECKING
 
-import dataTypes
+from dataTypes import BitSet, writePrefixedUnsignedByteArray
 from dataTypes import PacketDataWriter, PacketDataReader
 from ServerSettings import ServerSettings
 from enumValues import *
@@ -89,8 +89,8 @@ class Chunk:
         nbt = self.getNBT()
         x = nbt["xPos"]
         z = nbt["zPos"]
-        skyLightBitset = dataTypes.BitSet()
-        blockLightBitset = dataTypes.BitSet()
+        skyLightBitset = BitSet()
+        blockLightBitset = BitSet()
         skyLightDatas = []
         blockLightDatas = []
 
@@ -134,15 +134,15 @@ class Chunk:
         skyLightBitset.append(False)
         blockLightBitset.append(False)
 
-        skyLightDatasRaw = [ dataTypes.writePrefixedUnsignedByteArray(arr) for arr in skyLightDatas ]
-        blockLightDatasRaw = [ dataTypes.writePrefixedUnsignedByteArray(arr) for arr in blockLightDatas ]
+        skyLightDatasRaw = [ writePrefixedUnsignedByteArray(arr) for arr in skyLightDatas ]
+        blockLightDatasRaw = [ writePrefixedUnsignedByteArray(arr) for arr in blockLightDatas ]
 
         packetData.writeVarInt(0) # 0 block entities
         # light data vv
         packetData.writeBitSet(skyLightBitset) # sky light bitset
         packetData.writeBitSet(blockLightBitset) # block light bitset
-        packetData.writeBitSet(dataTypes.BitSet()) # bitset of empty sky light
-        packetData.writeBitSet(dataTypes.BitSet()) # bitset of empty block light
+        packetData.writeBitSet(BitSet()) # bitset of empty sky light
+        packetData.writeBitSet(BitSet()) # bitset of empty block light
         packetData.writePrefixedRawDataArray(skyLightDatasRaw) # sky light data arr
         packetData.writePrefixedRawDataArray(blockLightDatasRaw) # block light data arr
         return packetData
@@ -168,8 +168,8 @@ class Chunk:
             hmap = nbt["Heightmaps"][key]
             chunkHeightmaps.append((key, hmap))
 
-        skyLightBitset = dataTypes.BitSet()
-        blockLightBitset = dataTypes.BitSet()
+        skyLightBitset = BitSet()
+        blockLightBitset = BitSet()
         skyLightDatas = []
         blockLightDatas = []
 
@@ -248,15 +248,15 @@ class Chunk:
         skyLightBitset.append(False)
         blockLightBitset.append(False)
 
-        skyLightDatasRaw = [ dataTypes.writePrefixedUnsignedByteArray(arr) for arr in skyLightDatas ]
-        blockLightDatasRaw = [ dataTypes.writePrefixedUnsignedByteArray(arr) for arr in blockLightDatas ]
+        skyLightDatasRaw = [ writePrefixedUnsignedByteArray(arr) for arr in skyLightDatas ]
+        blockLightDatasRaw = [ writePrefixedUnsignedByteArray(arr) for arr in blockLightDatas ]
 
         packetData.writeVarInt(0) # 0 block entities
         # light data vv
         packetData.writeBitSet(skyLightBitset) # sky light bitset
         packetData.writeBitSet(blockLightBitset) # block light bitset
-        packetData.writeBitSet(dataTypes.BitSet()) # bitset of empty sky light
-        packetData.writeBitSet(dataTypes.BitSet()) # bitset of empty block light
+        packetData.writeBitSet(BitSet()) # bitset of empty sky light
+        packetData.writeBitSet(BitSet()) # bitset of empty block light
         packetData.writePrefixedRawDataArray(skyLightDatasRaw) # sky light data arr
         packetData.writePrefixedRawDataArray(blockLightDatasRaw) # block light data arr
 
