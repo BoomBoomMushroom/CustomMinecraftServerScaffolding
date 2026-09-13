@@ -34,6 +34,8 @@ class Client(Entity):
         self.username = ""
         self.setPosition(0, 80, 0) # set the position a bit up for our default player
         
+        self.isHatVisible = True
+        
         self.gamemode: GAMEMODE = "NULL"
         self.loadedChunkCoords: list[tuple[int, int]] = []
 

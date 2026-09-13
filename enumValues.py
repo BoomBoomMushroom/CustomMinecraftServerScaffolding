@@ -53,8 +53,7 @@ ACTION_ID_EnumFrom: dict[int, ACTION_ID] = {
     2: "REQUEST_GAMERULE_VALUES",
 }
 
-
-
+PLAYER_INFO_UPDATE_ACTIONS = Literal["AddPlayer", "InitializeChat", "UpdateGameMode", "UpdateListed", "UpdateLatency", "UpdateDisplayName", "UpdateListPriority", "UpdateHat"]
 
 
 

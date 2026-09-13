@@ -686,6 +686,7 @@ class ChangeDifficulty_ClientBound(Packet):
         changeDiffData = PacketDataWriter()
         changeDiffData.writeUnsignedByte( DIFFICULTY_Enum[difficulty] )
         changeDiffData.writeBoolean(difficultyLocked)
+        return ChangeDifficulty_ClientBound(changeDiffData)
 
 class ChangeDifficulty_ServerBound(Packet):
     def __init__(self, data = bytearray(0)):
@@ -745,14 +746,92 @@ class SetHeldSlot_ClientBound(Packet):
 class PlayerInfoUpdate_ClientBound(Packet):
     def __init__(self, data = bytearray(0)):
         super().__init__(0x46, "player_info_update", data, "ClientBound", "PLAY")
+    
+    @classmethod
+    def write(cls, piuInfoActions: list[PLAYER_INFO_UPDATE_ACTIONS], players: list):
+        piuActionsFlag = 0x00
+        for action in piuInfoActions:
+            bitToSet = 0x00
+            if action == "AddPlayer": bitToSet = 0x01
+            if action == "InitializeChat": bitToSet = 0x02
+            if action == "UpdateGameMode": bitToSet = 0x04
+            if action == "UpdateListed": bitToSet = 0x08
+            if action == "UpdateLatency": bitToSet = 0x10
+            if action == "UpdateDisplayName": bitToSet = 0x20
+            if action == "UpdateListPriority": bitToSet = 0x40
+            if action == "UpdateHat": bitToSet = 0x80
+            piuActionsFlag |= bitToSet
+
+        piuData = PacketDataWriter()
+        piuData.writeUnsignedByte(piuActionsFlag)
+        piuData.writeVarInt( len(players) )
+        for player in players:
+            piuData.writeRawBytes(player.UUID)
+            # MUST be in this order im like 99.9% certain of it
+            if piuActionsFlag & 0x01 == 0x01:
+                # Add player
+                piuData.writeRawBytes(player.getGameProfile(ignoreUUID=True))
+            if piuActionsFlag & 0x02 == 0x02:
+                # Init chat
+                pass # gonna skip this one since im not doing chat encryption right now
+            if piuActionsFlag & 0x04 == 0x04:
+                # Game Mode
+                piuData.writeVarInt( GAMEMODE_Enum[player.gamemode] )
+            if piuActionsFlag & 0x08 == 0x08:
+                # Listed in tab list
+                piuData.writeBoolean(True)
+            if piuActionsFlag & 0x10 == 0x10:
+                # Ping in ms
+                piuData.writeVarInt(0)
+            if piuActionsFlag & 0x20 == 0x20:
+                # Display name
+                pass # todo: when i make full text components we can send this
+            if piuActionsFlag & 0x40 == 0x40:
+                # List priority
+                piuData.writeVarInt(0)
+            if piuActionsFlag & 0x80 == 0x80:
+                # is hat visible
+                piuData.writeBoolean(player.isHatVisible)
+        
+        return PlayerInfoUpdate_ClientBound(piuData)
 
 class InitializeBorder_ClientBound(Packet):
     def __init__(self, data = bytearray(0)):
         super().__init__(0x2b, "initialize_border", data, "ClientBound", "PLAY")
 
+    @classmethod
+    def write(cls, centerX, centerZ, oldDiameter, newDiameter, speed, portalTeleportBoundary, warningBlocks, warningTime):
+        initWBData = PacketDataWriter()
+        initWBData.writeDouble(centerX) # center x
+        initWBData.writeDouble(centerZ) # center z
+        initWBData.writeDouble(oldDiameter) # old diameter
+        initWBData.writeDouble(newDiameter) # new diameter
+        initWBData.writeVarLong(speed) # speed
+        initWBData.writeVarInt(portalTeleportBoundary) # portal teleport boundary, usually 29999984
+        initWBData.writeVarInt(warningBlocks) # warning blocks, in meters
+        initWBData.writeVarInt(warningTime) # warning time, in seconds
+        
+        return InitializeBorder_ClientBound(initWBData)
+
+
 class SetTime_ClientBound(Packet):
     def __init__(self, data = bytearray(0)):
         super().__init__(0x71, "set_time", data, "ClientBound", "PLAY")
+
+    @classmethod
+    def write(cls, worldAge, worldClockRegEntriesAndTime):
+        setTimeData = PacketDataWriter()
+        setTimeData.writeLong(worldAge) # world age
+        setTimeData.writeVarInt(len(worldClockRegEntriesAndTime)) # len of array of Clocks
+        for clockRegId, timeOfClock, fracPart, rate in worldClockRegEntriesAndTime:
+            setTimeData.writeVarInt(clockRegId) # clock registry id
+            setTimeData.writeVarLong(timeOfClock) # current time of the clock
+            setTimeData.writeFloat(fracPart) # fractional part of the time in ticks (non-negative num less than 1)
+            setTimeData.writeFloat(rate) # rate, in clock tick per client tick
+        
+        # sending the time at 24000+ seems to auto modulos so we don't have to do it
+        
+        return SetTime_ClientBound(setTimeData)
 
 class GameEvent_ClientBound(Packet):
     def __init__(self, data = bytearray(0)):
@@ -785,7 +864,7 @@ class EntityEvent_ClientBound(Packet):
         entityEventData.writeInt(eid) # Entity ID
         entityEventData.writeByte(status) # 24->28 = op level 0->4 respectively
         
-        pass
+        return EntityEvent_ClientBound(entityEventData)
 
 """Misc"""
 class Ping_ClientBound(Packet):

@@ -131,77 +131,27 @@ class World:
         # server data (the MOTD and icon)
         
         # player info update (https://minecraft.wiki/w/Java_Edition_protocol/Packets#player-info:player-actions)
-        piuActionsFlag = 0x00
-        piuInfoActions = ["AddPlayer", "UpdateGameMode", "UpdateListed", "UpdateLatency", "UpdateListPriority", "UpdateHat"]
-        for action in piuInfoActions:
-            bitToSet = 0x00
-            if action == "AddPlayer": bitToSet = 0x01
-            if action == "InitializeChat": bitToSet = 0x02
-            if action == "UpdateGameMode": bitToSet = 0x04
-            if action == "UpdateListed": bitToSet = 0x08
-            if action == "UpdateLatency": bitToSet = 0x10
-            if action == "UpdateDisplayName": bitToSet = 0x20
-            if action == "UpdateListPriority": bitToSet = 0x40
-            if action == "UpdateHat": bitToSet = 0x80
-            piuActionsFlag |= bitToSet
-
-        piuData = PacketDataWriter()
-        piuData.writeUnsignedByte(piuActionsFlag)
-        piuData.writeVarInt( len(cls.players.keys()) )
-        for player in cls.players.values():
-            piuData.writeRawBytes(player.UUID)
-            # MUST be in this order im like 99.9% certain of it
-            if piuActionsFlag & 0x01 == 0x01:
-                # Add player
-                piuData.writeRawBytes(player.getGameProfile(ignoreUUID=True))
-            if piuActionsFlag & 0x02 == 0x02:
-                # Init chat
-                pass # gonna skip this one since im not doing chat encryption right now
-            if piuActionsFlag & 0x04 == 0x04:
-                # Game Mode
-                piuData.writeVarInt( GAMEMODE_Enum[player.gamemode] )
-            if piuActionsFlag & 0x08 == 0x08:
-                # Listed in tab list
-                piuData.writeBoolean(True)
-            if piuActionsFlag & 0x10 == 0x10:
-                # Ping in ms
-                piuData.writeVarInt(0)
-            if piuActionsFlag & 0x20 == 0x20:
-                # Display name
-                pass # idk how to work with TextComponents so ill skip it for now
-            if piuActionsFlag & 0x40 == 0x40:
-                # List priority
-                piuData.writeVarInt(0)
-            if piuActionsFlag & 0x80 == 0x80:
-                # is hat visible
-                piuData.writeBoolean(True) # true for now, why not
-
-        piuPacket = packets.PlayerInfoUpdate_ClientBound(piuData)
+        piuPacket = packets.PlayerInfoUpdate_ClientBound.write(
+            ["AddPlayer", "UpdateGameMode", "UpdateListed", "UpdateLatency", "UpdateListPriority", "UpdateHat"],
+            cls.players.values()
+        )
 
         # init world border
-        initWBData = PacketDataWriter()
-        initWBData.writeDouble(cls.worldBorder["centerX"]) # center x
-        initWBData.writeDouble(cls.worldBorder["centerZ"]) # center z
-        initWBData.writeDouble(cls.worldBorder["diameter"]) # old diameter
-        initWBData.writeDouble(cls.worldBorder["diameter"]) # new diameter
-        initWBData.writeVarLong(0) # speed
-        initWBData.writeVarInt(29999984) # portal teleport boundary, usually 29999984
-        initWBData.writeVarInt(cls.worldBorder["warningBlocks"]) # warning blocks, in meters
-        initWBData.writeVarInt(0) # warning time, in seconds
-        initWBPacket = packets.InitializeBorder_ClientBound(initWBData)
+        initWBPacket = packets.InitializeBorder_ClientBound.write(
+            centerX=cls.worldBorder["centerX"], centerZ=cls.worldBorder["centerZ"],
+            oldDiameter=cls.worldBorder["diameter"], newDiameter=cls.worldBorder["diameter"],
+            speed=0, portalTeleportBoundary=29999984, warningBlocks=cls.worldBorder["warningBlocks"], warningTime=0
+        )
 
         # update time
-        setTimeData = PacketDataWriter()
-        setTimeData.writeLong(cls.time) # world age
-        setTimeClocks: list[str] = Registry.getSyncedRegistry("minecraft:world_clock").getEntries()
-        print("\t\t", setTimeClocks)
-        setTimeData.writeVarInt(len(setTimeClocks)) # len of array of Clocks
-        for clockRegId, identifier in enumerate(setTimeClocks):
-            setTimeData.writeVarInt(clockRegId) # clock registry id
-            setTimeData.writeVarLong(cls.time) # current time of the clock
-            setTimeData.writeFloat(0) # fractional part of the time in ticks (non-negative num less than 1)
-            setTimeData.writeFloat(1) # rate, in clock tick per client tick
-        setTimePacket = packets.SetTime_ClientBound(setTimeData)
+        setTimePacket = packets.SetTime_ClientBound.write(
+            worldAge=cls.time,
+            # registryId (num), time in that clock, frac part of that time in ticks (0-1), rate in clock ticks per client tick
+            worldClockRegEntriesAndTime=[
+                [regId, cls.time, 0, 1]
+                for regId, identifier in enumerate(Registry.getSyncedRegistry("minecraft:world_clock").getEntries())
+            ]
+        )
         # sending the time at 24000+ seems to auto modulos so we don't have to do it
         
         # set default spawn location (optional, "home" spawn,,, not where client will spawn in)
