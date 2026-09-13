@@ -1,6 +1,7 @@
 import dataTypes
 from ServerSettings import ServerSettings
 from enumValues import *
+from Registry import Registry
 
 import time
 import json
@@ -73,9 +74,9 @@ class Intention_ServerBound(Packet):
 class StatusResponse_ClientBound(Packet):
     def __init__(self, data = bytearray(0)):
         super().__init__(0x0, "status_response", data, "ClientBound", "STATUS")
-class StatusResponse_ServerBound(Packet):
+class StatusRequest_ServerBound(Packet):
     def __init__(self, data = bytearray(0)):
-        super().__init__(0x0, "status_response", data, "ServerBound", "STATUS")
+        super().__init__(0x0, "status_request", data, "ServerBound", "STATUS")
     def handle(self):
         responseJson = {
             "version": {
@@ -102,9 +103,9 @@ class StatusResponse_ServerBound(Packet):
 class PongResponse_ClientBound(Packet):
     def __init__(self, data = bytearray(0)):
         super().__init__(0x1, "pong_response", data, "ClientBound", "STATUS")
-class PingResponse_ServerBound(Packet):
+class PingRequest_ServerBound(Packet):
     def __init__(self, data = bytearray(0)):
-        super().__init__(0x1, "ping_response", data, "ServerBound", "STATUS")
+        super().__init__(0x1, "ping_request", data, "ServerBound", "STATUS")
     def handle(self):
         responseLong = round(time.time() * 1000)
         responseBytes: bytes = bytes()
@@ -233,6 +234,17 @@ class PlayerLoaded_ServerBound(Packet):
     def handle(self):
         pass # nothing much to really handle
 
+class ConfigurationAcknowledge_ServerBound(Packet):
+    def __init__(self, data = bytearray(0),):
+        super().__init__(0x16, "configuration_acknowledge", data, "ServerBound", "PLAY")
+    def handle(self):
+        response = HandleResponse()
+        response.nextConnectionState = "CONFIGURATION"
+        response.clientLoginToWorld = False # log out of the world
+        
+        return response
+
+
 """Position"""
 class PlayerPosition_ClientBound(Packet):
     def __init__(self, data = bytearray(0)):
@@ -248,7 +260,7 @@ class AcceptTeleportation_ServerBound(Packet):
         return res
 class MovePlayerPos_ServerBound(Packet):
     def __init__(self, data = bytearray(0)):
-        super().__init__(0x1E, "set_player_pos", data, "ServerBound", "PLAY")
+        super().__init__(0x1E, "move_player_pos", data, "ServerBound", "PLAY")
     def handle(self):
         toConsume = self.data
         x, bytesRead = dataTypes.readDouble(toConsume)
@@ -333,7 +345,22 @@ class Swing_ServerBound(Packet):
     def handle(self):
         hand = dataTypes.readVarInt(self.data)[0]
         isMainHand = (hand==0) # if false, used offhand
-        # TODO: I probably need to make the server tell everyone that this player has swung their hand
+        
+        shr = ServerHandleResponse()
+        shr.type = "swing"
+        shr.swingHand = isMainHand
+        return shr
+
+class Attack_ServerBound(Packet):
+    def __init__(self, data = bytearray(0)):
+        super().__init__(0x1, "attack", data, "ServerBound", "PLAY")
+    def handle(self):
+        recvEntityId, bytesRead = dataTypes.readVarInt(self.data)
+        
+        shr = ServerHandleResponse()
+        shr.type = "attack"
+        shr.swingEntityId = recvEntityId
+        return shr
 
 
 class PlayerInput_ServerBound(Packet):
@@ -446,6 +473,149 @@ class PlayerAction_ServerBound(Packet):
         response = HandleResponse()
         return response
 
+class ClientCommand_ServerBound(Packet):
+    def __init__(self, data = bytearray(0)):
+        super().__init__(0xc, "client_command", data, "ServerBound", "PLAY")
+    def handle(self):
+        actionId, _ = dataTypes.readVarInt(self.data)
+        
+        shr = ServerHandleResponse()
+        shr.type = "ClientCommand"
+        shr.actionId = ACTION_ID_EnumFrom[actionId]
+        return shr
+
+class ContainerButtonClick_ServerBound(Packet):
+    def __init__(self, data = bytearray(0)):
+        super().__init__(0x11, "container_button_click", data, "ServerBound", "PLAY")
+    def handle(self):
+        toConsume = self.data
+        windowId, bytesRead = dataTypes.readVarInt(toConsume)
+        toConsume = toConsume[bytesRead:]
+        buttonId, _ = dataTypes.readVarInt(toConsume)
+        
+        shr = ServerHandleResponse()
+        shr.type = "ContainerButtonClick"
+        shr.windowId = windowId
+        shr.buttonId = buttonId
+        
+        return shr
+
+class ContainerClick_ServerBound(Packet):
+    def __init__(self, data = bytearray(0)):
+        super().__init__(0x12, "container_click", data, "ServerBound", "PLAY")
+    def handle(self):
+        toConsume = self.data
+        windowId, bytesRead = dataTypes.readVarInt(toConsume)
+        toConsume = toConsume[bytesRead:]
+        stateId, _ = dataTypes.readVarInt(toConsume)
+        toConsume = toConsume[bytesRead:]
+        slot, _ = dataTypes.readShort(toConsume)
+        toConsume = toConsume[bytesRead:]
+        button, _ = dataTypes.readByte(toConsume)
+        toConsume = toConsume[bytesRead:]
+        mode, _ = dataTypes.readVarInt(toConsume)
+        toConsume = toConsume[bytesRead:]
+        # 2 more things after this, array of changed slots, and carried item
+        #   both use hashed slot which i haven't implemented this
+        # todo: when this is implemented read them
+        
+        shr = ServerHandleResponse()
+        shr.type = "ContainerClick"
+        shr.windowId = windowId
+        shr.stateId = stateId
+        shr.slot = slot
+        shr.button = button
+        shr.mode = mode
+        shr.arrOfChangedSlots = {}
+        shr.carriedItem = None
+        
+        return shr
+
+
+
+class ChatAck_ServerBound(Packet):
+    def __init__(self, data = bytearray(0)):
+        super().__init__(0x6, "chat_ack", data, "ServerBound", "PLAY")
+    def handle(self):
+        messageCount, bytesRead = dataTypes.readVarInt(self.data)
+        # i dont think we really need to do anything here.
+        # TODO: fact check this ^^
+
+class Chat_ServerBound(Packet):
+    def __init__(self, data = bytearray(0)):
+        super().__init__(0x9, "chat", data, "ServerBound", "PLAY")
+    def handle(self):
+        # https://minecraft.wiki/w/Java_Edition_protocol/Packets#Chat_Message
+        toConsume = self.data
+        message, bytesRead = dataTypes.readString(toConsume)
+        toConsume = toConsume[bytesRead:]
+        timestamp, bytesRead = dataTypes.readLong(toConsume)
+        toConsume = toConsume[bytesRead:]
+        salt, bytesRead = dataTypes.readLong(toConsume)
+        toConsume = toConsume[bytesRead:]
+        isSigPresentByte, bytesRead = dataTypes.readByte(toConsume)
+        isSigPresent = isSigPresentByte==0x01
+        toConsume = toConsume[bytesRead:]
+        sigBytes: list[int] = []
+        if isSigPresent:
+            length, bytesRead = dataTypes.readVarInt(toConsume) # should be 256
+            toConsume = toConsume[bytesRead:]
+            for i in range(0,length):
+                sigByte, bytesRead = dataTypes.readByte(toConsume)
+                toConsume = toConsume[bytesRead:]
+                sigBytes.__annotations__(sigByte)
+        msgCount = dataTypes.readVarInt(toConsume)
+        toConsume = toConsume[bytesRead:]
+        # acknowledged is a 20 bit bitset aka 2.5 bytes, so 3 bytes need to be read
+        acknowledged1of3, bytesRead = dataTypes.readByte(toConsume)
+        toConsume = toConsume[bytesRead:]
+        acknowledged2of3, bytesRead = dataTypes.readByte(toConsume)
+        toConsume = toConsume[bytesRead:]
+        acknowledged3of3, bytesRead = dataTypes.readByte(toConsume)
+        toConsume = toConsume[bytesRead:]
+        checksum, bytesRead = dataTypes.readByte(toConsume)
+        
+        # message, timestamp, salt, sigBytes, msgCount, acknowledged1of3..., checksum
+        shr = ServerHandleResponse()
+        shr.type = "chat"
+        shr.message = message
+        shr.timestamp = timestamp
+        shr.messageSalt = salt
+        return shr
+class PlayerChat_ClientBound(Packet):
+    def __init__(self, data = bytearray(0)):
+        super().__init__(0x41, "player_chat", data, "ServerBound", "PLAY")
+    
+    @classmethod
+    def write(cls, senderName: str, message: str, timestamp: int, salt: int, clientsRecvCt: int, clientsSendCt: int, senderUUID: bytes) -> PlayerChat_ClientBound:
+        # https://minecraft.wiki/w/Java_Edition_protocol/Packets#Player_Chat_Message
+        data = bytes()
+        
+        # header
+        data += dataTypes.writeVarInt(clientsRecvCt) # global index, for something idr
+        data += senderUUID
+        data += dataTypes.writeVarInt(clientsSendCt) # index, somehow different than global index but im not 100% sure how
+        data += bytes([0x00]) # false, i dont wanna send message signature bytes
+        
+        #body
+        data += dataTypes.writeString(message)
+        data += dataTypes.writeLong(timestamp)
+        data += dataTypes.writeLong(salt)
+        
+        # idk some array
+        data += dataTypes.writeVarInt(0)
+        
+        # other
+        data += bytes([0x00]) # false, no "unsigned content" ig
+        data += dataTypes.writeVarInt(0) # filter type | 0=message not filtered, 1=message fully filtered, 2=message partially filtered
+        # data += ? # only write this if the filter type is partially filtered (2)
+        
+        # chat formatting
+        data += dataTypes.writeVarInt( Registry.getSyncedRegistry("minecraft:chat_type").getEntryIndex("minecraft:chat")+1 ) # +1 because this is a type "ID or X"
+        data += dataTypes.writeTextComponentOnlyString(senderName)
+        data += bytes([0x00]) # false, im not sending a target name
+        
+        return PlayerChat_ClientBound(data)
 
 """Updates"""
 class BlockUpdate_ClientBound(Packet):
@@ -456,6 +626,34 @@ class BlockUpdate_ClientBound(Packet):
 class ChangeDifficulty_ClientBound(Packet):
     def __init__(self, data = bytearray(0)):
         super().__init__(0xA, "change_difficulty", data, "ClientBound", "PLAY")
+
+class ChangeDifficulty_ServerBound(Packet):
+    def __init__(self, data = bytearray(0)):
+        super().__init__(0xA, "change_difficulty", data, "ServerBound", "PLAY")
+    def handle(self):
+        toConsume = self.data
+        difficulty, bytesRead = dataTypes.readUnsignedByte(toConsume)
+        toConsume = toConsume[bytesRead:]
+        difficultyLockedByte, bytesRead = dataTypes.readByte(toConsume)
+        difficultyLocked = difficultyLockedByte==0x01
+        
+        shr = ServerHandleResponse()
+        shr.type = "changeDifficulty"
+        shr.difficulty = DIFFICULTY_EnumFrom[difficulty]
+        shr.difficultyLocked = difficultyLocked
+        return shr
+
+class ChangeGamemode_ServerBound(Packet):
+    def __init__(self, data = bytearray(0)):
+        super().__init__(0x5, "change_game_mode", data, "ServerBound", "PLAY")
+    def handle(self):
+        gamemode, bytesRead = dataTypes.readVarInt(self.data)
+        
+        shr = ServerHandleResponse()
+        shr.type = "changeGamemode"
+        shr.gamemode: GAMEMODE = GAMEMODE_EnumFrom[gamemode]
+        return shr
+
 
 class PlayerAbilities_ClientBound(Packet):
     def __init__(self, data = bytearray(0)):
@@ -550,14 +748,45 @@ class HandleResponse:
         # Info to know that something did happen
         self.teleportId: int = None
 
+class ServerHandleResponse:
+    def __init__(self):
+        self.type: str = None
+        self.fromClientEID: int = None
+        
+        # swing
+        self.swingHand: bool = None # None = not used, False = offhand, True = main hand
+        # attack
+        self.swingEntityId: int = None
+        # changeDifficulty
+        self.difficulty: DIFFICULTY = None
+        self.difficultyLocked: bool = None
+        # changeGamemode
+        self.gamemode: GAMEMODE = None
+        # chat
+        self.message: str = None
+        self.timestamp: int = None
+        self.messageSalt: int = None
+            # there are more fields ive not passed here. signature, msg count, acknowledged, checksum
+        # client command (client status)
+        self.actionId: ACTION_ID = None
+        # containerButtonClick
+        self.windowId: int = None
+        self.buttonId: int = None
+        # containerClick
+        self.stateId: int = None
+        self.slot: int = None
+        self.button: int = None
+        self.mode: int = None
+        self.arrOfChangedSlots: dict[int, None] = None # todo: make this a dict of {slot num: hashed slot data}
+        self.carriedItem = None # todo: make this a hashed slot
 
 
 # Decoding and other packet stuff
 
 HANDSHAKING_PACKETS = [Intention_ServerBound]
 STATUS_PACKETS = [
-    StatusResponse_ServerBound,
-    PingResponse_ServerBound,
+    StatusRequest_ServerBound,
+    PingRequest_ServerBound,
 ]
 LOGIN_PACKETS = [
     Hello_ServerBound,
@@ -576,16 +805,27 @@ PLAY_PACKETS = [
     MovePlayerPosRot_ServerBound, MovePlayerPos_ServerBound, MovePlayerRot_ServerBound, MovePlayerStatusOnly_ServerBound,
 
     # Server setting stuff
+    ChangeDifficulty_ServerBound,
+    ChangeGamemode_ServerBound,
 
     # activities
-    Swing_ServerBound,
+    Swing_ServerBound, Attack_ServerBound,
 
     PlayerInput_ServerBound, PlayerCommand_ServerBound, PlayerAbilities_ServerBound,
     PlayerAction_ServerBound,
+    ClientCommand_ServerBound,
+    
+    ContainerButtonClick_ServerBound, ContainerClick_ServerBound,
+    
+    ChatAck_ServerBound,
+    Chat_ServerBound,
 
     # misc
     Pong_ServerBound,
     KeepAlive_ServerBound,
+    
+    # config
+    ConfigurationAcknowledge_ServerBound,
 ]
 
 def decodePacket(data: bytes, connState: ConnectionState) -> tuple[bytes, Packet]:
@@ -628,4 +868,40 @@ def decodePacket(data: bytes, connState: ConnectionState) -> tuple[bytes, Packet
         print(f"{textColors.RED}Unknown packet state and or id! {packetId=} {connState=}{textColors.RESET}")
 
     return (returnRemainingBytes, packet)
+
+
+def printCompletionOfPackets():
+    allPackets: dict[str, dict[str,dict[str,int]]] = None # protocol: {cb/sb: {name: {protocol_id: id}}}
+    targetPacketsFilePath = f"{Registry.reportsPath}/packets.json"
+    with open(targetPacketsFilePath, "r") as f:
+        allPackets = json.load(f)
+    if allPackets == None:
+        print(f"{textColors.RED}Unable to load target packet info from '{targetPacketsFilePath}'{textColors.RESET}")
+        return
+    
+    parts = ["handshake", "status", "login", "configuration", "play"]
+    partToList = {"handshake": HANDSHAKING_PACKETS, "status": STATUS_PACKETS, "login": LOGIN_PACKETS, "configuration": CONFIGURATION_PACKETS, "play": PLAY_PACKETS}
+    
+    print(f"{textColors.BLUE}Serverbound packet completeness test:{textColors.RESET}")
+    for p in parts:
+        keys = list(allPackets[p]["serverbound"].keys())
+        implementedList = partToList[p]
+        
+        percent = len(implementedList)/len(keys)
+        # 75%-100% = green, 50%-75%=yellow 0%-50%=red
+        prefix = textColors.GREEN if percent>=0.75 else (textColors.YELLOW if percent>=0.50 else textColors.RED)
+        print(f" -> {prefix}{p.capitalize()} packets | {len(implementedList)}/{len(keys)} = {(percent)*100:.2f}%{textColors.RESET}")
+        
+        onesWeHave = []
+        for packetClass in implementedList:
+            pCls = packetClass()
+            onesWeHave.append(f"minecraft:{pCls.name}")
+        
+        for packetName in keys:
+            isX = "x" if packetName in onesWeHave else ""
+            text = f"      [{isX}] {packetName.split(':')[1]}"
+            print(text)
+
+    
+    
 

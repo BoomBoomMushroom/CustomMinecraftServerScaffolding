@@ -3,6 +3,10 @@ import threading
 import world
 import server
 
+# print how complete our server is
+import packets
+packets.printCompletionOfPackets()
+
 worldThread = threading.Thread(target=world.World.run, args=(), daemon=True)
 worldThread.start()
 

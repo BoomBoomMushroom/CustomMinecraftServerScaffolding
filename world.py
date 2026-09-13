@@ -9,14 +9,15 @@ from ServerSettings import ServerSettings
 import packets
 from enumValues import *
 from RegionFiles import Region, Chunk
-from Registry import Registry, SyncedRegistry, TagsPacketForSyncedRegistry
+from Registry import Registry, TagsPacketForSyncedRegistry
 if TYPE_CHECKING: from client import Client # import only for type checking
+if TYPE_CHECKING: from Entity import Entity
 
 
 
 class World:
-    players: list[Client] = [] # maybe make a player class instead
-    entities: list = []
+    players: dict[int, Client] = {} # player eid, client class (which is a subclass of the entity class)
+    entities: dict[int, Entity] = {} # entity id, entity object
     regions: dict[str, Region] = {} # filename (ex. r.0.0.mca), object that has it loaded
 
     seed: int = 0
@@ -77,14 +78,14 @@ class World:
     @classmethod
     def onPlayerJoin(cls, client: Client):
         client.gamemode = cls.defaultGameMode
-        cls.players.append(client)
-        ServerSettings.playersOnline = len(cls.players)
+        cls.players[client.entityId] = client
+        ServerSettings.playersOnline = len(cls.players.keys())
 
         # login packet
         playData: bytes = bytes()
-        playData += dataTypes.writeInt(client.playerEntityId) # player entity id, EID
+        playData += dataTypes.writeInt(client.entityId) # player entity id, EID
         playData += dataTypes.writeBoolean(cls.isHardcore) # is hardcore
-        playData += dataTypes.writeVarInt(3) # all dimention names, 3 for how many dimention names we're giving
+        playData += dataTypes.writeVarInt(3) # all dimension names, 3 for how many dimension names we're giving
         playData += dataTypes.writeIdentifier("minecraft:overworld")
         playData += dataTypes.writeIdentifier("minecraft:nether")
         playData += dataTypes.writeIdentifier("minecraft:the_end")
@@ -94,15 +95,15 @@ class World:
         playData += dataTypes.writeBoolean(False) # reduced debug info (false for development)
         playData += dataTypes.writeBoolean(ServerSettings.gameRules.doImmediateRespawn==False) # enable respawn screen
         playData += dataTypes.writeBoolean(ServerSettings.gameRules.doLimitedCrafting) # do limited crafting (unused by client)
-        playData += dataTypes.writeVarInt( Registry.getSyncedRegistry("minecraft:dimension_type").getEntryIndex("minecraft:overworld") ) # dimention type
-        playData += dataTypes.writeIdentifier("minecraft:overworld") # dimention name
+        playData += dataTypes.writeVarInt( Registry.getSyncedRegistry("minecraft:dimension_type").getEntryIndex(f"minecraft:{client.dimension}") ) # dimension type
+        playData += dataTypes.writeIdentifier(f"minecraft:{client.dimension}") # dimension name
         playData += dataTypes.writeLong(0) # hashed seed, first 8 bytes of it TODO make it take cls.seed and hash it and shi
         playData += dataTypes.writeUnsignedByte(GAMEMODE_Enum[client.gamemode]) # game mode
-        playData += dataTypes.writeByte(-1) # previous gamemode, used for F3+F4. Same as above just -1 is null
+        playData += dataTypes.writeByte(GAMEMODE_Enum["NULL"]) # previous gamemode, used for F3+F4. Same as above just -1 is null
         playData += dataTypes.writeBoolean(False) # is debug world
         playData += dataTypes.writeBoolean(False) # is superflat world
         playData += dataTypes.writeBoolean(False) # has death location. makes the next 2 fields present
-        #playData += dataTypes.writeIdentifier("minecraft:overworld") # last death dimention name
+        #playData += dataTypes.writeIdentifier("minecraft:overworld") # last death dimension name
         #playData += dataTypes.writePosition(fill it out here) # last death pos
         playData += dataTypes.writeVarInt(0) # portal cooldown in ticks
         playData += dataTypes.writeVarInt(cls.worldSeaLevel) # sea level
@@ -117,7 +118,7 @@ class World:
         changeDiffPacket = packets.ChangeDifficulty_ClientBound(changeDiffData)
 
         # player abilities packet
-        # flagsVal |= 0x1 # if player is invulnurable
+        # flagsVal |= 0x1 # if player is invulnerable
         # flagsVal |= 0x2 # if player is flying
         # flagsVal |= 0x4 # if player is allowed to fly
         # flagsVal |= 0x8 # for "creative mode" (instant break blocks)
@@ -142,7 +143,7 @@ class World:
         
         # entity event packet | for the OP permission level
         entityEventData = bytes()
-        entityEventData += dataTypes.writeInt( client.playerEntityId ) # Entity ID
+        entityEventData += dataTypes.writeInt( client.entityId ) # Entity ID
         entityEventData += dataTypes.writeByte(24 + client.opLevel) # 24->28 = op level 0->4 respectivly
         entityEventPacket = packets.EntityEvent_ClientBound(entityEventData)
 
@@ -150,7 +151,7 @@ class World:
         
         # update recipe book packet
         
-        # syncronize player position packet
+        # synchronize player position packet
         ppcbData: bytes = bytes()
         client.teleportId += 1
         ppcbData += dataTypes.writeVarInt(client.teleportId) # teleport id, will be used to confirm in confirm teleport packet
@@ -184,8 +185,8 @@ class World:
 
         piuData = bytes()
         piuData += dataTypes.writeUnsignedByte(piuActionsFlag)
-        piuData += dataTypes.writeVarInt( len(cls.players) )
-        for player in cls.players:
+        piuData += dataTypes.writeVarInt( len(cls.players.keys()) )
+        for player in cls.players.values():
             piuData += player.UUID
             # MUST be in this order im like 99.9% certain of it
             if piuActionsFlag & 0x01 == 0x01:
@@ -286,7 +287,13 @@ class World:
         #chunkSendThread.start()
 
     @classmethod
+    def onPlayerLeave(cls, client: Client):
+        del cls.players[client.entityId]
+        # todo: send a logout packet i guess
+
+    @classmethod
     def sendChunksInView(cls, client: Client):
+        # TODO: make the server send a batch chunks thing, then negotiate it, and then queue the chunks outbound in chunks/tick
         playerChunkX = int(client.posX // 16)
         playerChunkZ = int(client.posZ // 16)
 
@@ -326,12 +333,73 @@ class World:
         client.loadedChunkCoords.extend(chunkCoordsToSend)
 
     @classmethod
+    def sendPacketToPlayer(cls, eid: int, packet: packets.Packet):
+        cls.players[eid].queuedOutboundPackets.append(packet)
+
+    @classmethod
     def sendPacketToAllPlayers(cls, packet: packets.Packet):
-        for p in cls.players: p.queuedOutboundPackets.append(packet)
+        for eid in cls.players.keys(): cls.sendPacketToPlayer(eid, packet)
+
+    @classmethod
+    def handlePacketReturn(cls, packetResponse: packets.ServerHandleResponse):
+        responseType = packetResponse.type
+        fromClientEID: int = packetResponse.fromClientEID
+        
+        if responseType == "swing":
+            isMainHand = packetResponse.swingHand
+            # TODO: make it announce this to other players
+        elif responseType == "attack":
+            recvAttackEID = packetResponse.swingEntityId
+            print(f"Attacked {recvAttackEID}")
+            # TODO: make the receiving entity take damage or something
+        elif responseType == "changeDifficulty":
+            difficulty: DIFFICULTY = packetResponse.difficulty
+            isDifficultyLocked: bool = packetResponse.difficultyLocked
+            print(f"Tried to change the difficulty to {difficulty} and {isDifficultyLocked=}")
+            # TODO make it change the difficulty if allowed to
+        elif responseType == "changeGamemode":
+            gamemode: GAMEMODE = packetResponse.gamemode
+            print(f"Tried to change gamemode to {gamemode}")
+            # TODO make it change the gamemode if allowed to
+        elif responseType == "chat":
+            message: str = packetResponse.message
+            timestamp: int = packetResponse.timestamp
+            salt: int = packetResponse.messageSalt
+            
+            for eid in cls.players.keys():
+                plr = cls.players[fromClientEID]
+                msgPacket = packets.PlayerChat_ClientBound.write(
+                    plr.username,
+                    message, timestamp, salt,
+                    plr.messagesRecv, plr.messagesSent, plr.UUID
+                )
+                cls.sendPacketToPlayer(eid, msgPacket)
+                plr.messagesRecv += 1
+                if eid == fromClientEID: plr.messagesSent += 1
+        elif responseType == "ClientCommand":
+            actionId: ACTION_ID = packetResponse.actionId
+            # TODO: handle this
+        elif responseType == "ContainerButtonClick":
+            windowId: int = packetResponse.windowId
+            buttonId: int = packetResponse.buttonId
+            
+            # todo: get the player's open container type and process it
+        elif responseType == "ContainerClick":
+            windowId = packetResponse.windowId
+            stateId = packetResponse.stateId
+            slot = packetResponse.slot
+            button = packetResponse.button
+            mode = packetResponse.mode
+            arrOfChangedSlots = packetResponse.arrOfChangedSlots
+            carriedItem = packetResponse.carriedItem
+            
+            # todo: implement this
+        
+        pass
 
     @classmethod
     def run(cls):
-        Registry.preloadRequriedSyncedRegistries() # preload the required ones we need
+        Registry.preloadRequiredSyncedRegistries() # preload the required ones we need
         TagsPacketForSyncedRegistry.init()
 
         while True:
@@ -345,7 +413,7 @@ class World:
 
         # send a keep alive packet every 5 seconds or so
         if cls.time % (5*cls.tickRate) == 0:
-            for plr in cls.players:
+            for plr in cls.players.values():
                 keepAlivePacket = packets.KeepAlive_ClientBound( random.randbytes(8) ) # 8 bytes for a random long
                 plr.queuedOutboundPackets.append(keepAlivePacket)
 

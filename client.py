@@ -3,10 +3,10 @@ import dataTypes
 from ServerSettings import ServerSettings
 from world import World
 from enumValues import *
-from Registry import Registry, SyncedRegistry, TagsPacketForSyncedRegistry
+from Registry import Registry, TagsPacketForSyncedRegistry
+from Entity import Entity
 
 import os
-import threading
 import random
 import requests
 
@@ -28,19 +28,12 @@ def getAllSubDirs(basePath: str) -> list[str]:
     return subdirs
 
 
-class Client:
+class Client(Entity):
     def __init__(self):
+        super().__init__()
         self.username = ""
-        self.UUID = None
-        self.posX: float = 0
-        self.posY: float = 80
-        self.posZ: float = 0
-        self.velX: float = 0
-        self.velY: float = 0
-        self.velZ: float = 0
-        self.yaw: float = 0
-        self.pitch: float = 0
-        self.onGround = False
+        self.setPosition(0, 80, 0) # set the position a bit up for our default player
+        
         self.gamemode: GAMEMODE = "NULL"
         self.loadedChunkCoords: list[tuple[int, int]] = []
 
@@ -59,8 +52,10 @@ class Client:
         self.playerPropertiesFromAPI: list[dict[str, str]] = [] # list of properties from the mojang api for our player. eg textures & capes
 
         # Special numbers that can tick up, keep track of these
-        self.playerEntityId: int = World.allocateEntityId()
+        self.setEID( World.allocateEntityId() )
         self.teleportId: int = random.randint(1, 999)
+        self.messagesRecv: int = 0
+        self.messagesSent: int = 0
 
         # Connection stuff
         self.state: packets.ConnectionState = "HANDSHAKING"
@@ -68,8 +63,12 @@ class Client:
         self.unhandledPackets: list[packets.Packet] = []
         self.queuedOutboundPackets: list[packets.Packet] = []
 
-    def handlePacketReturn(self, packetResponse: packets.HandleResponse):
+    def handlePacketReturn(self, packetResponse: packets.HandleResponse|packets.ServerHandleResponse):
         if packetResponse == None: return
+        # forward it to the world handler
+        if type(packetResponse) == packets.ServerHandleResponse:
+            packetResponse.fromClientEID = self.entityId
+            return World.handlePacketReturn(packetResponse)
 
         # connection updates
         self.queuedOutboundPackets.extend( packetResponse.respondWithPackets )
@@ -78,13 +77,13 @@ class Client:
         # update the client's data
         if packetResponse.updateUsername != None: self.username = packetResponse.updateUsername
         if packetResponse.updateUUID != None:
-            self.UUID = packetResponse.updateUUID
+            self.setUUID(packetResponse.updateUUID)
             self.generatePlayerPropertiesFromAPI() # now that we have the UUID fetch it's data from mojang servers
             
         if packetResponse.updatePosition != None:
-            self.posX, self.posY, self.posZ = packetResponse.updatePosition
+            self.setPosition(*packetResponse.updatePosition)
             World.sendChunksInView(self)
-        if packetResponse.updateRotation != None: self.yaw, self.pitch = packetResponse.updateRotation
+        if packetResponse.updateRotation != None: self.setRotation(*packetResponse.updateRotation)
         if packetResponse.updateOnGround != None: self.onGround = packetResponse.updateOnGround
         if packetResponse.updateAgainstWall != None: pass # dont care abt it rn
         if packetResponse.updateSprinting != None: self.isSprinting = packetResponse.updateSprinting
@@ -97,6 +96,7 @@ class Client:
             self.generateAndSendConfigData()
             self.generateAndSendRegistryData()
         if packetResponse.clientLoginToWorld == True: World.onPlayerJoin(self)
+        if packetResponse.clientLoginToWorld == False: World.onPlayerLeave(self)
 
         # info from packets to know stuff happened
         if packetResponse.teleportId != None:

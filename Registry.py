@@ -219,14 +219,16 @@ class SyncedRegistry:
         return self.entries.index(entryIdentifier)
 
 class Registry:
-    registriesPath = "./registries/26.2/generated/data/minecraft"
-    registryTagsPath = "./registries/26.2/generated/data/minecraft/tags"
+    version = ServerSettings.version # use this so we can force override it later if we need to
+    reportsPath = f"./registries/{version}/generated/reports"
+    registriesPath = f"./registries/{version}/generated/data/minecraft"
+    registryTagsPath = f"./registries/{version}/generated/data/minecraft/tags"
 
-    staticRegistriesFilePath = "./registries/26.2/generated/reports/registries.json"
+    staticRegistriesFilePath = f"./registries/{version}/generated/reports/registries.json"
     with open(staticRegistriesFilePath) as f:
         staticRegistries = json.load(f)
 
-    blockStatesPaletteFilePath = "./registries/26.2/generated/reports/blocks.json"
+    blockStatesPaletteFilePath = f"./registries/{version}/generated/reports/blocks.json"
     with open(blockStatesPaletteFilePath) as f:
         blockStatesPalette: dict[str, dict] = json.load(f)
 
@@ -301,7 +303,7 @@ class Registry:
     """
     _neededSyncedRegistries = ["enchantment", "jukebox_song", "test_instance", "wolf_variant", "test_environment", "chicken_sound_variant", "cow_sound_variant", "pig_sound_variant", "dimension_type", "enchantment_provider", "enchantment_provider/raid", "sulfur_cube_archetype", "cat_variant", "cow_variant", "chat_type", "frog_variant", "damage_type", "worldgen", "worldgen/structure", "worldgen/world_preset", "worldgen/biome", "worldgen/placed_feature", "worldgen/structure_set", "worldgen/noise_settings", "worldgen/processor_list", "worldgen/configured_feature", "worldgen/multi_noise_biome_source_parameter_list", "worldgen/flat_level_generator_preset", "worldgen/noise", "worldgen/noise/nether", "worldgen/configured_carver", "banner_pattern", "zombie_nautilus_variant", "world_clock", "painting_variant", "cat_sound_variant", "wolf_sound_variant", "timeline", "dialog", "chicken_variant", "pig_variant", "trim_pattern", "instrument", "trim_material"]
     @classmethod
-    def preloadRequriedSyncedRegistries(cls):
+    def preloadRequiredSyncedRegistries(cls):
         [ cls.getSyncedRegistry(reg) for reg in cls._neededSyncedRegistries ] # preloads them
 
 

@@ -97,6 +97,14 @@ def writeString(toWrite: str) -> bytes:
     #if len(lenBytes) > 3: raise Exception("Length of stringLength varint cannot be more than 3 bytes!")
     return lenBytes + toWrite.encode("utf-8")
 
+# text components
+def writeTextComponentOnlyString(data: str) -> bytes:
+    out = bytes()
+    out += bytes([8]) # id of the string nbt tag is 8
+    out += writeUnsignedShort(len(data))
+    out += data.encode("utf-8")
+    return out
+
 # bytes
 def writeUnsignedByte(value: int) -> bytes:
     return struct.pack(">B", value)

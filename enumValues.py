@@ -10,14 +10,27 @@ DIFFICULTY_Enum: dict[DIFFICULTY, int] = {
     "NORMAL": 2,
     "HARD": 3,
 }
+DIFFICULTY_EnumFrom: dict[int, DIFFICULTY] = {
+    0: "PEACEFUL",
+    1: "EASY",
+    2: "NORMAL",
+    3: "HARD",
+}
 
 GAMEMODE = Literal["NULL", "SURVIVAL", "CREATIVE", "ADVENTURE", "SPECTATOR"]
-GAMEMODE_Enum: dict[DIFFICULTY, int] = {
+GAMEMODE_Enum: dict[GAMEMODE, int] = {
     "NULL": -1,
     "SURVIVAL": 0,
     "CREATIVE": 1,
     "ADVENTURE": 2,
     "SPECTATOR": 3,
+}
+GAMEMODE_EnumFrom: dict[int, GAMEMODE] = {
+    1: "NULL",
+    0: "SURVIVAL",
+    1: "CREATIVE",
+    2: "ADVENTURE",
+    3: "SPECTATOR",
 }
 
 HEIGHTMAP_TYPE = Literal["WORLD_SURFACE", "MOTION_BLOCKING", "MOTION_BLOCKING_NO_LEAVES", "OCEAN_FLOOR"]
@@ -25,7 +38,19 @@ HEIGHTMAP_TYPE_Enum: dict[HEIGHTMAP_TYPE, int] = {
     "WORLD_SURFACE": 1,
     "MOTION_BLOCKING": 4,
     "MOTION_BLOCKING_NO_LEAVES": 5,
-    "OCEAN_FLOOR": None, # idk it or it doesnt have one
+    "OCEAN_FLOOR": None, # idk it or it doesn't have one
+}
+
+ACTION_ID = Literal["PREFORM_RESPAWN", "REQUEST_STATS", "REQUEST_GAMERULE_VALUES"]
+ACTION_ID_Enum: dict[ACTION_ID, int] = {
+    "PREFORM_RESPAWN": 0,
+    "REQUEST_STATS": 1,
+    "REQUEST_GAMERULE_VALUES": 2,
+}
+ACTION_ID_EnumFrom: dict[int, ACTION_ID] = {
+    0: "PREFORM_RESPAWN",
+    1: "REQUEST_STATS",
+    2: "REQUEST_GAMERULE_VALUES",
 }
 
 
