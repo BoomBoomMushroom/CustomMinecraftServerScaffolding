@@ -42,6 +42,10 @@ class Client(Entity):
         self.isElytraGliding = False
         self.isFlying = False # flying like creative mode, not via elytra
 
+        #   Stats
+        self.flyingSpeed = 0.05 # (default = 0.05)
+        self.fovModifier = 0.1 # fov modifier (default is 0.1?) check https://minecraft.wiki/w/Java_Edition_protocol/Packets#Player_Abilities_(clientbound)
+        
         #   Permissions
         self.isAllowedToFly = True
         self.isInvulnerable = False

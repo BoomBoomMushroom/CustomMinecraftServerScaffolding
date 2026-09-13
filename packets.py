@@ -297,6 +297,23 @@ class ConfigurationAcknowledge_ServerBound(Packet):
 class PlayerPosition_ClientBound(Packet):
     def __init__(self, data = bytearray(0)):
         super().__init__(0x48, "player_position", data, "ClientBound", "PLAY")
+    
+    @classmethod
+    def write(cls, teleportId, posX, posY, posZ, velX, velY, velZ, yaw, pitch, teleportFlags):
+        playerPosPacketData: bytes = PacketDataWriter()
+        playerPosPacketData.writeVarInt(teleportId) # teleport id, will be used to confirm in confirm teleport packet
+        playerPosPacketData.writeDouble(posX) # X
+        playerPosPacketData.writeDouble(posY) # Y
+        playerPosPacketData.writeDouble(posZ) # Z
+        playerPosPacketData.writeDouble(velX) # Vx
+        playerPosPacketData.writeDouble(velY) # Vy
+        playerPosPacketData.writeDouble(velZ) # Vz
+        playerPosPacketData.writeFloat(yaw) # yaw, in degrees
+        playerPosPacketData.writeFloat(pitch) # pitch, in degrees
+        playerPosPacketData.writeInt(teleportFlags) # teleport flags (https://minecraft.wiki/w/Java_Edition_protocol/Packets#Teleport_Flags)
+        
+        return PlayerPosition_ClientBound(playerPosPacketData)
+
 class AcceptTeleportation_ServerBound(Packet):
     def __init__(self, data = bytearray(0),):
         super().__init__(0x0, "accept_teleportation", data, "ServerBound", "PLAY")
@@ -701,9 +718,29 @@ class PlayerAbilities_ClientBound(Packet):
     def __init__(self, data = bytearray(0)):
         super().__init__(0x40, "player_abilities", data, "ClientBound", "PLAY")
 
+    @classmethod
+    def write(cls, isInvulnerable, isFlying, isAllowedToFly, canInstaBreakBlocks, flyingSpeed, fovModifier):
+        abilitiesFlagsVal = 0
+        if isInvulnerable: abilitiesFlagsVal |= 0x1
+        if isFlying: abilitiesFlagsVal |= 0x2
+        if isAllowedToFly: abilitiesFlagsVal |= 0x4
+        if canInstaBreakBlocks: abilitiesFlagsVal |= 0x8
+
+        playerAbilitiesData = PacketDataWriter()
+        playerAbilitiesData.writeByte(abilitiesFlagsVal)
+        playerAbilitiesData.writeFloat(flyingSpeed) # flying speed (default = 0.05)
+        playerAbilitiesData.writeFloat(fovModifier) # fov modifier (default is 0.1?) check https://minecraft.wiki/w/Java_Edition_protocol/Packets#Player_Abilities_(clientbound)
+        return PlayerAbilities_ClientBound(playerAbilitiesData)
+
 class SetHeldSlot_ClientBound(Packet):
     def __init__(self, data = bytearray(0)):
         super().__init__(0x69, "set_held_slot", data, "ClientBound", "PLAY")
+    
+    @classmethod
+    def write(cls, slot):
+        heldSlotData = PacketDataWriter()
+        heldSlotData.writeVarInt(slot) # slow which the player has selected (0-8)
+        return SetHeldSlot_ClientBound(heldSlotData)
 
 class PlayerInfoUpdate_ClientBound(Packet):
     def __init__(self, data = bytearray(0)):
@@ -741,6 +778,14 @@ class SetDefaultSpawnPosition_ClientBound(Packet):
 class EntityEvent_ClientBound(Packet):
     def __init__(self, data = bytearray(0)):
         super().__init__(0x22, "entity_event", data, "ClientBound", "PLAY")
+    
+    @classmethod
+    def write(cls, eid, status):
+        entityEventData = PacketDataWriter()
+        entityEventData.writeInt(eid) # Entity ID
+        entityEventData.writeByte(status) # 24->28 = op level 0->4 respectively
+        
+        pass
 
 """Misc"""
 class Ping_ClientBound(Packet):

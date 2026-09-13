@@ -95,56 +95,38 @@ class World:
         # TODO: make it take cls.seed and hash it and shi (first 8 bytes is what we pass, aka 1 long)
 
         # change difficulty packet
-        changeDiffPacket = packets.ChangeDifficulty_ClientBound.write(cls.difficulty, cls.difficultyLocked)
+        changeDiffPacket = packets.ChangeDifficulty_ClientBound.write(difficulty=cls.difficulty, difficultyLocked=cls.difficultyLocked)
 
         # player abilities packet
-        # flagsVal |= 0x1 # if player is invulnerable
-        # flagsVal |= 0x2 # if player is flying
-        # flagsVal |= 0x4 # if player is allowed to fly
-        # flagsVal |= 0x8 # for "creative mode" (instant break blocks)
-        abilitiesFlagsVal = 0
-        if client.isInvulnerable: abilitiesFlagsVal |= 0x1
-        if client.isFlying: abilitiesFlagsVal |= 0x2
-        if client.isAllowedToFly: abilitiesFlagsVal |= 0x4
-        if client.canInstaBreakBlocks: abilitiesFlagsVal |= 0x8
-
-        playerAbilitiesData = PacketDataWriter()
-        playerAbilitiesData.writeByte(abilitiesFlagsVal)
-        playerAbilitiesData.writeFloat(0.05) # flying speed (default = 0.05)
-        playerAbilitiesData.writeFloat(0.1) # fov modifier (default is 0.1?) check https://minecraft.wiki/w/Java_Edition_protocol/Packets#Player_Abilities_(clientbound)
-        playerAbilitiesPacket = packets.PlayerAbilities_ClientBound(playerAbilitiesData)
+        playerAbilitiesPacket = packets.PlayerAbilities_ClientBound.write(
+            isInvulnerable=client.isInvulnerable, isFlying=client.isFlying,
+            isAllowedToFly=client.isAllowedToFly, canInstaBreakBlocks=client.canInstaBreakBlocks,
+            flyingSpeed=client.flyingSpeed, fovModifier=client.fovModifier
+        )
 
         # set held item packet
-        heldSlotData = PacketDataWriter()
-        heldSlotData.writeVarInt(0) # slow which the player has selected (0-8)
-        heldSlotPacket = packets.SetHeldSlot_ClientBound(heldSlotData)
+        heldSlotPacket = packets.SetHeldSlot_ClientBound.write(slot=0)
 
         # update recipes packet
         
         # entity event packet | for the OP permission level
-        entityEventData = PacketDataWriter()
-        entityEventData.writeInt( client.entityId ) # Entity ID
-        entityEventData.writeByte(24 + client.opLevel) # 24->28 = op level 0->4 respectivly
-        entityEventPacket = packets.EntityEvent_ClientBound(entityEventData)
+        entityEventOpLevelPacket = packets.EntityEvent_ClientBound.write(
+            eid=client.entityId, status=(24+client.opLevel) # 24->28 = op level 0->4 respectively
+        )
 
         # commands packet
         
         # update recipe book packet
         
         # synchronize player position packet
-        ppcbData: bytes = PacketDataWriter()
         client.teleportId += 1
-        ppcbData.writeVarInt(client.teleportId) # teleport id, will be used to confirm in confirm teleport packet
-        ppcbData.writeDouble(client.posX) # X
-        ppcbData.writeDouble(client.posY) # Y
-        ppcbData.writeDouble(client.posZ) # Z
-        ppcbData.writeDouble(client.velX) # Vx
-        ppcbData.writeDouble(client.velY) # Vy
-        ppcbData.writeDouble(client.velZ) # Vz
-        ppcbData.writeFloat(client.yaw) # yaw, in degrees
-        ppcbData.writeFloat(client.pitch) # pitch, in degrees
-        ppcbData.writeInt(0) # teleport flags (https://minecraft.wiki/w/Java_Edition_protocol/Packets#Teleport_Flags)
-        ppcb = packets.PlayerPosition_ClientBound(ppcbData)
+        playerPosPacket = packets.PlayerPosition_ClientBound.write(
+            teleportId=client.teleportId,
+            posX=client.posX, posY=client.posY, posZ=client.posZ,
+            velX=client.velX, velY=client.velY, velZ=client.velZ,
+            yaw=client.yaw, pitch=client.pitch,
+            teleportFlags=0 # check thr write method for what each flag does
+        )
 
         # server data (the MOTD and icon)
         
@@ -254,8 +236,8 @@ class World:
         client.queuedOutboundPackets.extend([
             playPacket,
             changeDiffPacket, playerAbilitiesPacket, heldSlotPacket,
-            entityEventPacket,
-            ppcb,
+            entityEventOpLevelPacket,
+            playerPosPacket,
             piuPacket, initWBPacket, setTimePacket, defaultSpawnPacket,
             gameEventPacket,
             #tickingStatePacket,
