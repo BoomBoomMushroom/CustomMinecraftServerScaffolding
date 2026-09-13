@@ -4,7 +4,6 @@ import math
 import threading
 import random
 
-from dataTypes import PacketDataReader, PacketDataWriter
 from ServerSettings import ServerSettings
 import packets
 from enumValues import *
@@ -71,7 +70,7 @@ class World:
     def getRegionFromChunkCoords(cls, chunkX: int, chunkZ: int) -> Region:
         regionX = chunkX // 32
         regionZ = chunkZ // 32
-        regionFileName = f"./world/overworld/r.{regionX}.{regionZ}.mca"
+        regionFileName = f"./{cls.worldName}/overworld/r.{regionX}.{regionZ}.mca"
         return cls.getRegion(regionFileName)
     
 
@@ -155,33 +154,23 @@ class World:
         # sending the time at 24000+ seems to auto modulos so we don't have to do it
         
         # set default spawn location (optional, "home" spawn,,, not where client will spawn in)
-        defaultSpawnData = PacketDataWriter()
-        defaultSpawnData.writeIdentifier(cls.worldSpawn["dimension"]) # dimension
-        defaultSpawnData.writePosition(cls.worldSpawn["x"], cls.worldSpawn["y"], cls.worldSpawn["z"]) # pos
-        defaultSpawnData.writeFloat(cls.worldSpawn["yaw"]) # yaw
-        defaultSpawnData.writeFloat(cls.worldSpawn["pitch"]) # pitch
-        defaultSpawnPacket = packets.SetDefaultSpawnPosition_ClientBound(defaultSpawnData)
+        defaultSpawnPacket = packets.SetDefaultSpawnPosition_ClientBound.write(
+            dimensionIdentifier=cls.worldSpawn["dimension"],
+            x=cls.worldSpawn["x"], y=cls.worldSpawn["y"], z=cls.worldSpawn["z"],
+            yaw=cls.worldSpawn["yaw"], pitch=cls.worldSpawn["pitch"]
+        )
 
         # game event (for telling the client to wait for chunks)
-        gameEventData = PacketDataWriter()
-        gameEventData.writeUnsignedByte(13) # event id, 13=start waiting for level chunks
-        gameEventData.writeFloat(0) # I don't think "start waiting for level chunks" needs this but ill put it here just in case
-        gameEventPacket = packets.GameEvent_ClientBound(gameEventData)
+        gameEventPacket = packets.GameEvent_ClientBound.write(
+            eventId=GAME_EVENT_ID_ENUM["START_WAITING_FOR_CHUNKS"],
+            value=0 # I don't think "start waiting for level chunks" needs this but ill put it here just in case
+        )
 
-        # set ticking state (sets the tickrate and if its frozen or not)
-        tickingStateData = PacketDataWriter()
-        tickingStateData.writeFloat(cls.tickRate) # tick rate
-        tickingStateData.writeBoolean(cls.isTickFrozen) # is frozen?
-        #tickingStatePacket = packets.TickingState_ClientBound(tickingStateData) # I have no idea why this fucks up the speed of the client's game, no matter the value I put. Im just gonan remove it for rn
+        # set ticking state (sets the tickrate and if its frozen or not)        
+        tickingStatePacket = packets.TickingState_ClientBound.write(tickRate=cls.tickRate, isTickFrozen=cls.isTickFrozen) # I have no idea why this fucks up the speed of the client's game, no matter the value I put. Im just gonna remove it for rn
 
         # set center chunk
-        playerChunkX = client.posX // 16
-        playerChunkZ = client.posZ // 16
-
-        setChunkCenterData = PacketDataWriter()
-        setChunkCenterData.writeVarInt(playerChunkX) # chunk x
-        setChunkCenterData.writeVarInt(playerChunkZ) # chunk z
-        setChunkCenterPacket = packets.SetChunkCacheCenter_ClientBound(setChunkCenterData)
+        setChunkCenterPacket = packets.SetChunkCacheCenter_ClientBound.write(client.posX, client.posZ)
 
         client.queuedOutboundPackets.extend([
             playPacket,
@@ -206,6 +195,9 @@ class World:
     @classmethod
     def sendChunksInView(cls, client: Client):
         # TODO: make the server send a batch chunks thing, then negotiate it, and then queue the chunks outbound in chunks/tick
+        #setChunkCenterPacket = packets.SetChunkCacheCenter_ClientBound.write(client.posX, client.posZ)
+        #client.queuedOutboundPackets.append(setChunkCenterPacket)
+        
         playerChunkX = int(client.posX // 16)
         playerChunkZ = int(client.posZ // 16)
 

@@ -33,6 +33,7 @@ class Client(Entity):
         super().__init__()
         self.username = ""
         self.setPosition(0, 80, 0) # set the position a bit up for our default player
+        self.setPosition(108, 68, 32)
         
         self.isHatVisible = True
         

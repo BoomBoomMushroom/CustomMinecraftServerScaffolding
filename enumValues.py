@@ -55,6 +55,40 @@ ACTION_ID_EnumFrom: dict[int, ACTION_ID] = {
 
 PLAYER_INFO_UPDATE_ACTIONS = Literal["AddPlayer", "InitializeChat", "UpdateGameMode", "UpdateListed", "UpdateLatency", "UpdateDisplayName", "UpdateListPriority", "UpdateHat"]
 
+# https://minecraft.wiki/w/Java_Edition_protocol/Packets#Game_Event
+GAME_EVENT_ID = Literal[
+    "NO_RESPAWN_BLOCK_AVAILABLE", # displays you have no home bed or it was obstructed
+    "BEGIN_RAINING", # actually stops the rain, use change rain level instead (sets rain level = 0)
+    "END_RAINING", # actually starts the rain (sets rain level = 1)
+    "CHANGE_GAME_MODE", # values use the GAMEMODE enums from above to know which one to use
+    "WIN_GAME", # roll the credits
+    "DEMO_EVENT", # values of 0=show welcome demo screen, 101=tell movement, 102=tell jump, 103=tell inventory, 104=tell demo over and to take a screen shot
+    "PLAY_ARROW_HIT_SOUND",
+    "CHANGE_RAIN_LEVEL", # value for rain level ranges from 0 to 1
+    "CHANGE_THUNDER_LEVEL", # value for thunder level ranges from 0 to 1, doesn't start raining
+    "PLAY_PUFFERFISH_STING_SOUND",
+    "PLAY_ELDER_GUARDIAN_JUMP_SCARE", # 0 = visual effect only, 1 = sound + visual effect
+    "TOGGLE_IMMEDIATE_RESPAWN", # 0 = enable respawn screen, 1 = immediate respawn ; linked to the `doImmediateRespawn` gamerule
+    "TOGGLE_LIMITED_CRAFTING", # 0 = disable limited crafting, 1 = enable limited crafting ; linked to the `doLimitedCrafting` gamerule
+    "START_WAITING_FOR_CHUNKS"
+]
+GAME_EVENT_ID_ENUM: dict[GAME_EVENT_ID, int] = {
+    "NO_RESPAWN_BLOCK_AVAILABLE": 0,
+    "BEGIN_RAINING": 1,
+    "END_RAINING": 2,
+    "CHANGE_GAME_MODE": 3,
+    "WIN_GAME": 4,
+    "DEMO_EVENT": 5,
+    "PLAY_ARROW_HIT_SOUND": 6,
+    "CHANGE_RAIN_LEVEL": 7,
+    "CHANGE_THUNDER_LEVEL": 8,
+    "PLAY_PUFFERFISH_STING_SOUND": 9,
+    "PLAY_ELDER_GUARDIAN_JUMP_SCARE": 10,
+    "TOGGLE_IMMEDIATE_RESPAWN": 11,
+    "TOGGLE_LIMITED_CRAFTING": 12,
+    "START_WAITING_FOR_CHUNKS": 13,
+}
+
 
 
 class textColors:

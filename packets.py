@@ -50,6 +50,7 @@ class Packet:
         print(self.data)
         raise NotImplementedError(f"`handle` not implemented on main Packet class, make an override for: {self.__str__()}")
 
+    @classmethod
     def write(self) -> Packet:
         raise NotImplementedError(f"`write` not implemented on main Packet class, make an override for: {self.__str__()}")
 
@@ -707,7 +708,7 @@ class ChangeGamemode_ServerBound(Packet):
         super().__init__(0x5, "change_game_mode", data, "ServerBound", "PLAY")
     def handle(self):
         reader = PacketDataReader(self.data)
-        gamemode = reader.readVarInt(self.data)
+        gamemode = reader.readVarInt()
         
         shr = ServerHandleResponse()
         shr.type = "changeGamemode"
@@ -837,13 +838,40 @@ class GameEvent_ClientBound(Packet):
     def __init__(self, data = bytearray(0)):
         super().__init__(0x26, "game_event", data, "ClientBound", "PLAY")
 
+    @classmethod
+    def write(self, eventId:GAME_EVENT_ID, value: float=0):
+        # https://minecraft.wiki/w/Java_Edition_protocol/Packets#Game_Event
+        gameEventData = PacketDataWriter()
+        gameEventData.writeUnsignedByte(eventId) # event id
+        gameEventData.writeFloat(value) # value for specific events
+        
+        return GameEvent_ClientBound(gameEventData)
+
 class TickingState_ClientBound(Packet):
     def __init__(self, data = bytearray(0)):
         super().__init__(0x7F, "ticking_state", data, "ClientBound", "PLAY")
+    
+    @classmethod
+    def write(self, tickRate, isTickFrozen):
+        tickingStateData = PacketDataWriter()
+        tickingStateData.writeFloat(tickRate) # tick rate
+        tickingStateData.writeBoolean(isTickFrozen) # is frozen?
+        return TickingState_ClientBound(tickingStateData)
 
 class SetChunkCacheCenter_ClientBound(Packet):
     def __init__(self, data = bytearray(0)):
         super().__init__(0x5E, "set_chunk_cache_center", data, "ClientBound", "PLAY")
+        
+    @classmethod
+    def write(self, plrX, plrZ):
+        playerChunkX = int(plrX // 16)
+        playerChunkZ = int(plrZ // 16)
+
+        setChunkCenterData = PacketDataWriter()
+        setChunkCenterData.writeVarInt(playerChunkX) # chunk x
+        setChunkCenterData.writeVarInt(playerChunkZ) # chunk z
+        
+        return SetChunkCacheCenter_ClientBound(setChunkCenterData)
 
 class LevelChunkWithLight_ClientBound(Packet):
     def __init__(self, data = bytearray(0)):
@@ -852,6 +880,16 @@ class LevelChunkWithLight_ClientBound(Packet):
 class SetDefaultSpawnPosition_ClientBound(Packet):
     def __init__(self, data = bytearray(0)):
         super().__init__(0x61, "set_default_spawn_position", data, "ClientBound", "PLAY")
+
+    @classmethod
+    def write(cls, dimensionIdentifier, x, y, z, yaw, pitch):
+        defaultSpawnData = PacketDataWriter()
+        defaultSpawnData.writeIdentifier(dimensionIdentifier) # dimension
+        defaultSpawnData.writePosition(x, y, z) # pos
+        defaultSpawnData.writeFloat(yaw) # yaw
+        defaultSpawnData.writeFloat(pitch) # pitch
+        
+        return SetDefaultSpawnPosition_ClientBound(defaultSpawnData)
 
 """Entities"""
 class EntityEvent_ClientBound(Packet):
@@ -874,7 +912,7 @@ class Pong_ServerBound(Packet):
     def __init__(self, data = bytearray(0)):
         super().__init__(0x2D, "pong", data, "ServerBound", "PLAY")
     def handle(self):
-        reader = PacketDataReader(self.data)
+        reader = PacketDataReader()
         pingId = reader.readInt()
         return # nothing else to do
 
