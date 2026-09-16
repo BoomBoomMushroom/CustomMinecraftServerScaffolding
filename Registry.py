@@ -264,11 +264,17 @@ class Registry:
         return candidates[0]
 
     @classmethod
-    def getRegistryNamespaceList(cls, namespace: str) -> list[str]:
+    def getStaticRegistryNamespaceList(cls, namespace: str) -> list[str]:
         return cls.staticRegistries.get(namespace)
     @classmethod
-    def getRegistryData(cls, namespace: str, identifier: str) -> int:
-        return cls.getRegistryNamespaceList(namespace)["entries"][identifier]["protocol_id"]
+    def getStaticRegistryData(cls, namespace: str, identifier: str) -> int:
+        return cls.getStaticRegistryNamespaceList(namespace)["entries"][identifier]["protocol_id"]
+    @classmethod
+    def getStaticRegistryIdentifier(cls, namespace: str, protocolId: int) -> str:
+        regList = cls.getStaticRegistryNamespaceList(namespace)
+        for entry in regList["entries"].keys():
+            if regList["entries"][entry]["protocol_id"] == protocolId: return entry
+        return -1
 
     syncedRegistries: dict[str, SyncedRegistry] = {}
     @classmethod
@@ -308,7 +314,7 @@ class Registry:
 
 
 if __name__ == "__main__":
-    a = Registry.getSyncedRegistry("minecraft:world_clock").getEntries()
+    a = Registry.getStaticRegistryIdentifier("minecraft:debug_subscription", 0)
     print(a)
     
     pass

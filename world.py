@@ -270,6 +270,9 @@ class World:
             timestamp: int = packetResponse.timestamp
             salt: int = packetResponse.messageSalt
             
+            # messages cannot be longer than 256 characters
+            if len(message) > 256: return
+            
             for eid in cls.players.keys():
                 plr = cls.players[fromClientEID]
                 msgPacket = packets.PlayerChat_ClientBound.write(
@@ -309,6 +312,21 @@ class World:
             data = packetResponse.cookieData
             
             # todo: uhh idk what we'd do with this. forward this to whatever requested the cookies
+        elif responseType == "DebugSubscriptionRequest":
+            subscribedEvents = packetResponse.subscribedEvents
+            cls.players[ fromClientEID ].debugSubscriptions = subscribedEvents
+        elif responseType == "EntityTagQuery":
+            transactionId = packetResponse.queryEntityTransactionId
+            targetEID = packetResponse.queryEntityEID
+            
+            # todo: actually query it's tags and find out which packet to send back
+            # https://minecraft.wiki/w/Java_Edition_protocol/Packets#Query_Entity_Tag
+        elif responseType == "LockDifficulty":
+            # only really used in single player since the difficulty options are hidden in multiplayer
+            if cls.players[fromClientEID].opLevel >= 2:
+                # must have at least op level 2
+                cls.difficultyLocked = packetResponse.difficultyLocked
+                # todo: send an update packet out?
         
         pass
 

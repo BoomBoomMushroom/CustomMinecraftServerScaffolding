@@ -756,6 +756,19 @@ class ChangeDifficulty_ServerBound(Packet):
         shr.difficultyLocked = difficultyLocked
         return shr
 
+class LockDifficulty_ServerBound(Packet):
+    def __init__(self, data = bytearray(0)):
+        super().__init__(0x1D, "lock_difficulty", data, "ServerBound", "PLAY")
+    def handle(self):
+        reader = PacketDataReader(self.data)
+        isLocked = reader.readBoolean()
+        
+        shr = ServerHandleResponse()
+        shr.type = "LockDifficulty"
+        shr.difficultyLocked = isLocked
+        return shr
+
+
 class ChangeGamemode_ServerBound(Packet):
     def __init__(self, data = bytearray(0)):
         super().__init__(0x5, "change_game_mode", data, "ServerBound", "PLAY")
@@ -1001,6 +1014,38 @@ class CookieResponse_ServerBound(Packet):
         shs.cookieData = cookieData
         return shs
 
+class DebugSubscriptionRequest_ServerBound(Packet):
+    def __init__(self, data = bytearray(0)):
+        super().__init__(0x17, "debug_subscription_request", data, "ServerBound", "PLAY")
+    def handle(self):
+        reader = PacketDataReader(self.data)
+        eventCount = reader.readVarInt()
+        events: list[str] = []
+        for i in range(0, eventCount):
+            eventId = reader.readVarInt()
+            identifier = Registry.getStaticRegistryIdentifier("minecraft:debug_subscription", eventId)
+            events.append(identifier)
+        
+        shs = ServerHandleResponse()
+        shs.type = "DebugSubscriptionRequest"
+        shs.subscribedEvents = events
+        return shs
+
+class EntityTagQuery_ServerBound(Packet):
+    def __init__(self, data = bytearray(0)):
+        super().__init__(0x19, "entity_tag_query", data, "ServerBound", "PLAY")
+    def handle(self):
+        reader = PacketDataReader(self.data)
+        transactionId = reader.readVarInt()
+        targetEID = reader.readVarInt()
+        
+        shs = ServerHandleResponse()
+        shs.type = "EntityTagQuery"
+        shs.queryEntityTransactionId = transactionId
+        shs.queryEntityEID = targetEID
+        return shs
+
+
 
 # Extra classes
 class HandleResponse:
@@ -1065,6 +1110,11 @@ class ServerHandleResponse:
         # cookieResponse
         self.cookieKey: str = None
         self.cookieData: list[int] = None
+        # debugSubscriptionRequest
+        self.subscribedEvents: list[str] = None
+        # entityTagQuery
+        self.queryEntityTransactionId: int = None
+        self.queryEntityEID: int = None
 
 
 # Decoding and other packet stuff
@@ -1092,7 +1142,7 @@ PLAY_PACKETS = [
     MovePlayerPosRot_ServerBound, MovePlayerPos_ServerBound, MovePlayerRot_ServerBound, MovePlayerStatusOnly_ServerBound,
 
     # Server setting stuff
-    ChangeDifficulty_ServerBound,
+    ChangeDifficulty_ServerBound, LockDifficulty_ServerBound,
     ChangeGamemode_ServerBound,
 
     # activities
@@ -1106,10 +1156,13 @@ PLAY_PACKETS = [
     
     ChatAck_ServerBound,
     Chat_ServerBound,
+    DebugSubscriptionRequest_ServerBound,
+    EntityTagQuery_ServerBound,
 
     # misc
     Pong_ServerBound,
     KeepAlive_ServerBound,
+    CookieResponse_ServerBound,
     
     # config
     ConfigurationAcknowledge_ServerBound,
@@ -1147,6 +1200,7 @@ def decodePacket(data: bytes, connState: ConnectionState) -> tuple[bytes, Packet
         print(f"{textColors.RED}Unknown packet state and or id! {packetId=} {connState=}{textColors.RESET}")
 
     return (reader.data, packet)
+
 
 def printCompletionOfPackets():
     allPackets: dict[str, dict[str,dict[str,int]]] = None # protocol: {cb/sb: {name: {protocol_id: id}}}

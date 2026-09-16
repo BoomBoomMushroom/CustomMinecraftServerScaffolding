@@ -54,6 +54,7 @@ class Client(Entity):
         self.isInvulnerable = False
         self.canInstaBreakBlocks = False
         self.opLevel = 4 # 0 to 4 inclusive
+        self.debugSubscriptions: list[str] = []
 
         self.isUnsignedPlayerPropertiesFromAPI: bool = False
         self.playerPropertiesFromAPI: list[dict[str, str]] = [] # list of properties from the mojang api for our player. eg textures & capes
