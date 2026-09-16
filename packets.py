@@ -246,18 +246,40 @@ class SelectKnownPacks_ClientBound(Packet):
         super().__init__(0xE, "select_known_packs", data, "ClientBound", "CONFIGURATION")
 
     @classmethod
-    def write(cls, datapacks: list[str, str]):
+    def write(cls, datapacks: list[tuple[str, str]]):
         knownDatapacksData = PacketDataWriter()
         knownDatapacksData.writeVarInt( len(datapacks) ) # how many datapacks?
         for dp in datapacks:
             # dp[0] = "minecraft:core" # or something like this
-            namespace, pathname = dp[0].split(":")
+            splits = dp[0].split(":")
+            namespace = splits[0]
+            pathname = ":".join(splits[1:])
             ver = dp[1]
             knownDatapacksData.writeString(namespace) # namespace
             knownDatapacksData.writeString(pathname) # pathname
             knownDatapacksData.writeString(ver) # version of the pack
         
         return SelectKnownPacks_ClientBound(knownDatapacksData)
+
+class SelectKnownPacks_ServerBound(Packet):
+    def __init__(self, data = bytearray(0)):
+        super().__init__(0x7, "select_known_packs", data, "ServerBound", "CONFIGURATION")
+
+    def handle(self):
+        reader = PacketDataReader(self.data)
+        numOfPacks = reader.readVarInt()
+        packs: list[tuple[str,str]] = []
+        for i in range(0, numOfPacks):
+            namespace = reader.readString()
+            pathname = reader.readString()
+            version = reader.readString()
+            identifier = namespace + ":" + pathname
+            packs.append((identifier, version))
+        
+        # yay we have a list of packs the client knows,,,
+        #   pretty much the same as the one we sent
+        return # nothing to return really
+
 
 # Play packets
 class Login_ClientBound(Packet):
@@ -1060,6 +1082,7 @@ CONFIGURATION_PACKETS = [
     ClientInformation_ServerBound,
     FinishConfiguration_ServerBound,
     CustomPayload_ServerBound,
+    SelectKnownPacks_ServerBound,
 ]
 PLAY_PACKETS = [
     PlayerLoaded_ServerBound, ClientTickEnd_ServerBound,

@@ -33,7 +33,7 @@ class Client(Entity):
         super().__init__()
         self.username = ""
         self.setPosition(0, 80, 0) # set the position a bit up for our default player
-        self.setPosition(108, 68, 32)
+        self.setPosition(108.5, 68, 32.5)
         
         self.isHatVisible = True
         
@@ -163,7 +163,7 @@ class Client(Entity):
         brandPluginMessagePacket = packets.CustomPayload_ClientBound(brandPluginMessageData)
 
         featureFlagsPacket = packets.UpdateEnabledFeatures_ClientBound.write(["minecraft:vanilla"])
-        knownDatapacksPacket = packets.SelectKnownPacks_ClientBound.write(["minecraft:core", ServerSettings.version])
+        knownDatapacksPacket = packets.SelectKnownPacks_ClientBound.write([("minecraft:core", ServerSettings.version)])
 
 
         self.queuedOutboundPackets.extend([
