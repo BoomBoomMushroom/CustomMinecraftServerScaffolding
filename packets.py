@@ -231,9 +231,33 @@ class CustomPayload_ClientBound(Packet):
 class UpdateEnabledFeatures_ClientBound(Packet):
     def __init__(self, data = bytearray(0)):
         super().__init__(0xC, "update_enabled_features", data, "ClientBound", "CONFIGURATION")
+        
+    @classmethod
+    def write(cls, featureFlags: list[str]):
+        featureFlagsData = PacketDataWriter()
+        featureFlagsData.writeVarInt( len(featureFlags) )
+        for ff in featureFlags:
+            featureFlagsData.writeIdentifier(ff)
+        
+        return UpdateEnabledFeatures_ClientBound(featureFlagsData)
+
 class SelectKnownPacks_ClientBound(Packet):
     def __init__(self, data = bytearray(0)):
         super().__init__(0xE, "select_known_packs", data, "ClientBound", "CONFIGURATION")
+
+    @classmethod
+    def write(cls, datapacks: list[str, str]):
+        knownDatapacksData = PacketDataWriter()
+        knownDatapacksData.writeVarInt( len(datapacks) ) # how many datapacks?
+        for dp in datapacks:
+            # dp[0] = "minecraft:core" # or something like this
+            namespace, pathname = dp[0].split(":")
+            ver = dp[1]
+            knownDatapacksData.writeString(namespace) # namespace
+            knownDatapacksData.writeString(pathname) # pathname
+            knownDatapacksData.writeString(ver) # version of the pack
+        
+        return SelectKnownPacks_ClientBound(knownDatapacksData)
 
 # Play packets
 class Login_ClientBound(Packet):

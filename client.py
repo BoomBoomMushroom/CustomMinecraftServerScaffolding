@@ -162,17 +162,8 @@ class Client(Entity):
         brandPluginMessageData.writeString(ServerSettings.serverBrand)
         brandPluginMessagePacket = packets.CustomPayload_ClientBound(brandPluginMessageData)
 
-        featureFlagsData = PacketDataWriter()
-        featureFlagsData.writeVarInt(1) # how many identifiers after this?
-        featureFlagsData.writeIdentifier("minecraft:vanilla")
-        featureFlagsPacket = packets.UpdateEnabledFeatures_ClientBound(featureFlagsData)
-
-        knownDatapacksData = PacketDataWriter()
-        knownDatapacksData.writeVarInt(1) # how many datapacks?
-        knownDatapacksData.writeString("minecraft") # namespace
-        knownDatapacksData.writeString("core") # pathname
-        knownDatapacksData.writeString(ServerSettings.version) # version of the pack
-        knownDatapacksPacket = packets.SelectKnownPacks_ClientBound(knownDatapacksData)
+        featureFlagsPacket = packets.UpdateEnabledFeatures_ClientBound.write(["minecraft:vanilla"])
+        knownDatapacksPacket = packets.SelectKnownPacks_ClientBound.write(["minecraft:core", ServerSettings.version])
 
 
         self.queuedOutboundPackets.extend([
