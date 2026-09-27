@@ -43,6 +43,8 @@ class World:
     nextEntityId: int = 1
     @classmethod
     def allocateEntityId(cls) -> int:
+        # NOTE: When the ender dragon's EID is allocated, 8 consecutive EIDs are made
+        #   one for each hitbox. https://minecraft.wiki/w/Java_Edition_protocol/Packets#Interact
         eid = cls.nextEntityId
         cls.nextEntityId += 1
         return eid
@@ -327,6 +329,13 @@ class World:
                 # must have at least op level 2
                 cls.difficultyLocked = packetResponse.difficultyLocked
                 # todo: send an update packet out?
+        elif responseType == "EntityInteraction":
+            # TODO: Handle the interaction. It is when a player right clicks an entity. So enter minecart and stuff
+            pass
+        elif responseType == "PaddleBoat":
+            leftPaddleTurning = packetResponse.leftPaddle
+            rightPaddleTurning = packetResponse.rightPaddle
+            # TODO: update the boat's entity metadata (get the eid from the player's riding entity probably)
         
         pass
 

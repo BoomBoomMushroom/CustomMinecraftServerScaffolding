@@ -1,5 +1,6 @@
 import struct
 import re
+import math
 # For format strings for (un)packing check here: https://docs.python.org/3/library/struct.html#struct-format-strings
 
 class PacketDataWriter:
@@ -40,6 +41,7 @@ class PacketDataWriter:
     def writeBoolean(self, value): self.data += writeBoolean(value)
     def writeIdentifier(self, identifier): self.data += writeIdentifier(identifier)
     def writePosition(self, x, y, z): self.data += writePosition(x, y, z)
+    def writeLpVec3(self, x, y, z): self.data += writeLpVec3(x, y, z)
 
 class PacketDataReader:
     def __init__(self, data: bytes):
@@ -116,6 +118,11 @@ class PacketDataReader:
         out, bytesRead = readPosition(self.data)
         self.afterRead(bytesRead)
         return out
+    def readLpVec3(self):
+        out, bytesRead = readLpVec3(self.data)
+        self.afterRead(bytesRead)
+        return out
+        
 
 
 
@@ -350,6 +357,62 @@ def readPosition(data: bytes) -> tuple[tuple[int, int, int], int]:
     z = packedNum & (2**26 - 1) # 0b111... (26 ones)
 
     return ((x,y,z), 8)
+
+# LpVec3 (adapted from the pseudo-code https://minecraft.wiki/w/Java_Edition_protocol/Data_types#LpVec3)
+LPVEC3_MAX_QUANTIZED_VALUE = 32766.0
+LPVEC3_CONTINUATION_FLAG = 0x04
+LPVEC3_SCALE_BITS = 0x03
+def lpvec3_pack(value):
+    return round((value * 0.5 + 0.5) * LPVEC3_MAX_QUANTIZED_VALUE)
+def lpvec3_unpack(value):
+    return min((value & 32767), LPVEC3_MAX_QUANTIZED_VALUE) * 2.0 / LPVEC3_MAX_QUANTIZED_VALUE - 1.0
+
+def readLpVec3(data: bytes) -> tuple[tuple[float, float, float], int]:
+    bytesRead = 0
+    byte1 = data[0]
+    bytesRead += 1
+    
+    if byte1 == 0: return ([0,0,0], bytesRead)
+    
+    byte2 = data[1]
+    bytes3To6 = (data[2] << 24) | (data[3] << 16) | (data[4] << 8) | (data[5])
+    bytesRead += 5
+    
+    packed = (bytes3To6 << 16) | (byte2 << 8) | byte1
+    scaleFactor = byte1 & LPVEC3_SCALE_BITS
+    if (byte1 & LPVEC3_CONTINUATION_FLAG) != 0:
+        varI, _ = readVarInt(data[bytesRead:])
+        bytesRead += _
+        scaleFactor |= varI << 2
+    
+    return ([
+        lpvec3_unpack(packed >> 3) * scaleFactor,
+        lpvec3_unpack(packed >> 18) * scaleFactor,
+        lpvec3_unpack(packed >> 33) * scaleFactor,
+    ], bytesRead)
+
+def writeLpVec3(x: float, y: float, z: float) -> bytes:
+    out = bytes()
+    maxCoordinate = max(abs(x), max(abs(y), abs(z)))
+    if maxCoordinate < 1.0 / LPVEC3_MAX_QUANTIZED_VALUE:
+        return bytes([0x00])
+
+    scaleFactor = math.ceil(maxCoordinate)
+    needContinuation = (scaleFactor & LPVEC3_SCALE_BITS) != scaleFactor
+    
+    packedScale = scaleFactor & LPVEC3_SCALE_BITS | LPVEC3_CONTINUATION_FLAG if needContinuation else scaleFactor
+    packedX = lpvec3_pack(x / scaleFactor) << 3
+    packedY = lpvec3_pack(y / scaleFactor) << 18
+    packedZ = lpvec3_pack(z / scaleFactor) << 33
+    packed = packedZ | packedY | packedX | packedScale
+    
+    out += bytes([ (packed) & 0xFF ])
+    out += bytes([ (packed >> 8) & 0xFF ])
+    out += writeInt( (packed >> 16) & 0xFFFFFFFF )
+    if needContinuation:
+        out += writeVarInt(scaleFactor >> 2)
+    
+    return out
 
 def reverseBits(value: int, bits: int=8) -> int:
     return int( ('{:0'+str(bits)+'b}').format(value)[::-1], 2)

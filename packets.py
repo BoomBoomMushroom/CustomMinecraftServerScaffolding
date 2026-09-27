@@ -449,6 +449,26 @@ class MovePlayerStatusOnly_ServerBound(Packet):
         res.updateAgainstWall = pushingWall
         return res
 
+class MoveVehicle_ServerBound(Packet):
+    def __init__(self, data = bytearray(0)):
+        super().__init__(0x22, "move_vehicle", data, "ServerBound", "PLAY")
+    def handle(self):
+        reader = PacketDataReader(self.data)
+        x = reader.readDouble()
+        y = reader.readDouble()
+        z = reader.readDouble()
+        yaw = reader.readFloat()
+        pitch = reader.readFloat()
+        onGround = reader.readBoolean()
+
+        # TODO: Check if this needs to update the vehicle's position as well/instead
+        res = HandleResponse()
+        res.updatePosition = (x,y,z)
+        res.updateRotation = (yaw, pitch)
+        res.updateOnGround = onGround
+        return res
+
+
 """Activities"""
 class Swing_ServerBound(Packet):
     def __init__(self, data = bytearray(0)):
@@ -970,6 +990,21 @@ class EntityEvent_ClientBound(Packet):
         
         return EntityEvent_ClientBound(entityEventData)
 
+class PaddleBoat_ServerBound(Packet):
+    def __init__(self, data = bytearray(0)):
+        super().__init__(0x23, "paddle_boat", data, "ServerBound", "PLAY")
+    def handle(self):
+        reader = PacketDataReader()
+        leftPaddleTurning = reader.readBoolean()
+        rightPaddleTurning = reader.readBoolean()
+        
+        shs = ServerHandleResponse()
+        shs.type = "PaddleBoat"
+        shs.leftPaddle = leftPaddleTurning
+        shs.rightPaddle = rightPaddleTurning
+        return shs
+
+
 """Misc"""
 class Ping_ClientBound(Packet):
     def __init__(self, data = bytearray(0)):
@@ -1045,6 +1080,24 @@ class EntityTagQuery_ServerBound(Packet):
         shs.queryEntityEID = targetEID
         return shs
 
+class Interact_ServerBound(Packet):
+    def __init__(self, data = bytearray(0)):
+        super().__init__(0x1A, "interact", data, "ServerBound", "PLAY")
+    def handle(self):
+        reader = PacketDataReader(self.data)
+        targetEID = reader.readVarInt()
+        isMainHand: bool = (reader.readVarInt()==0)
+        targetOffset = reader.readLpVec3()
+        isSneakKeyPressed = reader.readBoolean()
+        
+        shs = ServerHandleResponse()
+        shs.type = "EntityInteraction"
+        shs.targetEID = targetEID
+        shs.swingHand = isMainHand
+        shs.targetOffset = targetOffset
+        shs.isSneakKeyPressed = isSneakKeyPressed
+        return shs
+
 
 
 # Extra classes
@@ -1115,6 +1168,13 @@ class ServerHandleResponse:
         # entityTagQuery
         self.queryEntityTransactionId: int = None
         self.queryEntityEID: int = None
+        # entityInteraction
+        self.targetEID: int = None
+        self.targetOffset: tuple[float, float, float] = None
+        self.isSneakKeyPressed: bool = None
+        # paddleBoat
+        self.leftPaddle: bool = None
+        self.rightPaddle: bool = None
 
 
 # Decoding and other packet stuff
@@ -1140,6 +1200,7 @@ PLAY_PACKETS = [
     # position
     AcceptTeleportation_ServerBound,
     MovePlayerPosRot_ServerBound, MovePlayerPos_ServerBound, MovePlayerRot_ServerBound, MovePlayerStatusOnly_ServerBound,
+    MoveVehicle_ServerBound,
 
     # Server setting stuff
     ChangeDifficulty_ServerBound, LockDifficulty_ServerBound,
@@ -1158,6 +1219,8 @@ PLAY_PACKETS = [
     Chat_ServerBound,
     DebugSubscriptionRequest_ServerBound,
     EntityTagQuery_ServerBound,
+    Interact_ServerBound,
+    PaddleBoat_ServerBound,
 
     # misc
     Pong_ServerBound,
