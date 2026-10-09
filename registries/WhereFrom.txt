@@ -1,3 +1,6 @@
 Read "Obtaining vanilla registry data" @ https://minecraft.wiki/w/Java_Edition_protocol/Registries#List_of_synchronized_registries
 
-Download client.jar or server.jar and the data/ folder is what we want, rename it to the version you want and then put it in the registries folder
+Download the server.jar of the version you want. Get the `generated` folder from running a command, which can be found here: https://minecraft.wiki/w/Minecraft_Wiki:Projects/wiki.vg_merge/Data_Generators#Registries_report
+I ran `java -DbundlerMainClass=net.minecraft.data.Main -jar minecraft_server.jar --all` for version 26.2
+Make a folder for your minecraft version inside here (the `registries` folder) and then copy the `generated` folder into threadLoadEntries
+
