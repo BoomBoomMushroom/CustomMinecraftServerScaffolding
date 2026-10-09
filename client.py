@@ -33,7 +33,7 @@ class Client(Entity):
         super().__init__()
         self.username = ""
         self.setPosition(0, 80, 0) # set the position a bit up for our default player
-        self.setPosition(108.5, 68, 32.5)
+        self.setPosition(-341, 57, -341)
         
         self.isHatVisible = True
         
@@ -90,13 +90,15 @@ class Client(Entity):
             
         if packetResponse.updatePosition != None:
             self.setPosition(*packetResponse.updatePosition)
+            World.sendChunkCenter(self)
             World.sendChunksInView(self)
         if packetResponse.updateRotation != None: self.setRotation(*packetResponse.updateRotation)
         if packetResponse.updateOnGround != None: self.onGround = packetResponse.updateOnGround
         if packetResponse.updateAgainstWall != None: pass # dont care abt it rn
         if packetResponse.updateSprinting != None: self.isSprinting = packetResponse.updateSprinting
         if packetResponse.updateElytraGliding != None: self.isElytraGliding = packetResponse.updateElytraGliding
-        if packetResponse.updateFlying != None: self.isFlying = packetResponse.updateFlying
+        if packetResponse.updateFlying != None:
+            self.isFlying = packetResponse.updateFlying
 
         # client todo stuff
         if packetResponse.sendLoginFinishedPacket == True: self.sendLoginFinishedPacket()

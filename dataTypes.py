@@ -194,6 +194,8 @@ def readVarInt(data: bytes) -> tuple[int, int]: # value, bytesRead
 
 def writeVarInt(value: int) -> bytes:
     writer = BytesWriter()
+    value &= 0xFFFFFFFF # mask it so we can write negative values
+    
     while (value & ~0x7F) != 0:
         writer.appendInt( (value & 0x7F) | 0x80 )
 

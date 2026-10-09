@@ -13,6 +13,7 @@ class ServerSettings:
     motd: str = "MOTD from Server, to modify it: change `ServerSettings.motd` in ServerSettings.py"
     serverIcon: str = "data:image/png;base64,<data>" # image data as base64, rn its just garbage data
 
+    
 
 
 

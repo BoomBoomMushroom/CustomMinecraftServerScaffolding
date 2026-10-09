@@ -949,9 +949,7 @@ class SetChunkCacheCenter_ClientBound(Packet):
         super().__init__(0x5E, "set_chunk_cache_center", data, "ClientBound", "PLAY")
         
     @classmethod
-    def write(self, plrX, plrZ):
-        playerChunkX = int(plrX // 16)
-        playerChunkZ = int(plrZ // 16)
+    def write(self, playerChunkX: int, playerChunkZ: int):
 
         setChunkCenterData = PacketDataWriter()
         setChunkCenterData.writeVarInt(playerChunkX) # chunk x

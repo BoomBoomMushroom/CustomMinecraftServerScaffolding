@@ -16,7 +16,7 @@ def handleClient(conn: socket.socket, addr: socket._RetAddress):
                 try:
                     read = conn.recv(1024)
                     clientObj.readInBytes(read)
-
+                    
                     # NOTHING to read, returned None, meaning we gotta close the connection
                     if not read:
                         disconnectClient = True

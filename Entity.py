@@ -17,6 +17,11 @@ class Entity:
         self.onGround = False
         self.entityId: int = None
     
+    @property
+    def chunkPosX(self): return int(self.posX // 16)
+    @property
+    def chunkPosZ(self): return int(self.posZ // 16)
+    
     def setPosition(self, x: float=0, y: float=0, z: float=0):
         self.posX = x
         self.posY = y

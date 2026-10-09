@@ -171,9 +171,6 @@ class World:
         # set ticking state (sets the tickrate and if its frozen or not)        
         tickingStatePacket = packets.TickingState_ClientBound.write(tickRate=cls.tickRate, isTickFrozen=cls.isTickFrozen) # I have no idea why this fucks up the speed of the client's game, no matter the value I put. Im just gonna remove it for rn
 
-        # set center chunk
-        setChunkCenterPacket = packets.SetChunkCacheCenter_ClientBound.write(client.posX, client.posZ)
-
         client.queuedOutboundPackets.extend([
             playPacket,
             changeDiffPacket, playerAbilitiesPacket, heldSlotPacket,
@@ -182,7 +179,6 @@ class World:
             piuPacket, initWBPacket, setTimePacket, defaultSpawnPacket,
             gameEventPacket,
             #tickingStatePacket,
-            setChunkCenterPacket
         ])
 
         # send chunks to player after we've queued the packets above
@@ -195,13 +191,18 @@ class World:
         # todo: send a logout packet i guess
 
     @classmethod
+    def sendChunkCenter(cls, client: Client):
+        setChunkCenterPacket = packets.SetChunkCacheCenter_ClientBound.write(client.chunkPosX, client.chunkPosZ)
+        client.queuedOutboundPackets.append( setChunkCenterPacket )
+
+    @classmethod
     def sendChunksInView(cls, client: Client):
         # TODO: make the server send a batch chunks thing, then negotiate it, and then queue the chunks outbound in chunks/tick
         #setChunkCenterPacket = packets.SetChunkCacheCenter_ClientBound.write(client.posX, client.posZ)
         #client.queuedOutboundPackets.append(setChunkCenterPacket)
         
-        playerChunkX = int(client.posX // 16)
-        playerChunkZ = int(client.posZ // 16)
+        playerChunkX = client.chunkPosX
+        playerChunkZ = client.chunkPosZ
 
         halfRenderDist = 3
         #halfRenderDist = cls.renderDistance//2

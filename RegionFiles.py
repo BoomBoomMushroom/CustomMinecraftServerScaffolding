@@ -153,6 +153,7 @@ class Chunk:
             return self.cachedPacketData
 
         nbt = self.getNBT()
+        if "Level" in nbt: nbt = nbt["Level"] # sometimes all of the data we want is inside of the "Level" tag.
         chunkStatus = nbt["Status"]
         if chunkStatus != "minecraft:full":
             # chunk is still generating in some way, it is not done,,, ignore it
