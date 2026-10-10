@@ -204,7 +204,7 @@ class World:
         playerChunkX = client.chunkPosX
         playerChunkZ = client.chunkPosZ
 
-        halfRenderDist = 3
+        halfRenderDist = 6
         #halfRenderDist = cls.renderDistance//2
         #halfRenderDist = cls.renderDistance
 
