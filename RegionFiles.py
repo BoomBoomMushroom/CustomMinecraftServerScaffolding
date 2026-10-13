@@ -68,6 +68,38 @@ class Region:
 
     # TODO: have the ability to modify the chunks and maybe save the region file back again
 
+class Block:
+    def __init__(self, blockIdentifier: str="", blockState: dict={}):
+        self.identifier = blockIdentifier
+        self.properties = blockState
+    
+    @property
+    def blockStateId(self): return Registry.getBlockStateId(self.identifier, self.properties)
+
+class SubChunk:
+    def __init__(self, blocks: list[Block]=[], biomes: list[str]=[], yLevel: int=0):
+        self.blocks: list[Block] = blocks # 16x16x16
+        self.biomes: list[str] = biomes # a 4x4x4 (64 entries) list of biomes in the chunk section. entries are their identifiers
+        self.yLevel: int = 0 # the y level, not index. ex. 0, 16, 32, 48, ...,
+        self.fluidCount = 0
+        self.blockCount = 0
+
+    def XYZToIndex(self, x: int=0, y: int=0, z: int=0):
+        # clamp xyz to be between 0 and 16 (inclusive, exclusive)
+        x = max(0, min(15, x))
+        y = max(0, min(15, y))
+        z = max(0, min(15, z))
+        return x + (y * 16) + (z * 16 * 16)
+
+    def IndexToXYZ(self, index: int=0):
+        maxIndex = (16*16*16)-1
+        index = max(0, min(maxIndex, index)) # clamp the index to be between 0 and 4096 (inclusive, exclusive)
+        x = index % 16
+        z = (index // 16) % 16
+        y = index // 256
+        return (x, y, z)
+    
+    
 
 # TODO: make a lock/waiter on the getters like in Registry.py w/ synced registries to prevent weird stuff
 class Chunk:
