@@ -1,6 +1,7 @@
 import nbtlib
 import zlib
 import io
+import math
 from typing import Literal, TYPE_CHECKING
 
 from dataTypes import BitSet, writePrefixedUnsignedByteArray
@@ -18,7 +19,7 @@ class Region:
         self.payload: bytes = bytes()
 
         self.chunkPositionOffsets: list[int] = []
-        self.chunks: list[int] = []
+        self.chunks: list[Chunk] = []
         self.chunkDataNBT: list[nbtlib.File] = []
 
         with open(regionFilePath, "rb") as f: self.payload = f.read()
@@ -68,6 +69,33 @@ class Region:
 
     # TODO: have the ability to modify the chunks and maybe save the region file back again
 
+class Palette:
+    def __init__(self, bitsPerEntry: int=0):
+        self.bitsPerEntry: int = bitsPerEntry
+        self.paletteEntries: list[Block] = []
+
+    @classmethod
+    def bitsPerEntryCalculate(cls, entriesCount: int=0):
+        bits = math.ceil(math.log2(entriesCount))
+        return bits
+
+    # biomes are represented as string identifiers
+    @classmethod
+    def fromList(cls, data: list[Block|str], isBlocks: bool=True) -> Palette:
+        bpe = cls.bitsPerEntryCalculate(len(data))
+        if len(data) == 0: bpe = 0
+        if isBlocks:
+            if bpe > 8: bpe = 15 # if over the limit then make it direct
+            elif bpe < 4: bpe = 4 # minimum bpe of 4
+        else:
+            if bpe > 3: bpe = 7 # if over the limit make it direct
+        
+        out = Palette( bpe )
+        
+        
+        
+        return out
+
 class Block:
     def __init__(self, blockIdentifier: str="", blockState: dict={}):
         self.identifier = blockIdentifier
@@ -76,13 +104,44 @@ class Block:
     @property
     def blockStateId(self): return Registry.getBlockStateId(self.identifier, self.properties)
 
+    def __eq__(self, value):
+        if type(value) == Block:
+            return self.blockStateId == value.blockStateId
+        else: raise NotImplementedError(f"Block.__eq__ not implemented against type: {type(value)}")
+
 class SubChunk:
     def __init__(self, blocks: list[Block]=[], biomes: list[str]=[], yLevel: int=0):
         self.blocks: list[Block] = blocks # 16x16x16
         self.biomes: list[str] = biomes # a 4x4x4 (64 entries) list of biomes in the chunk section. entries are their identifiers
-        self.yLevel: int = 0 # the y level, not index. ex. 0, 16, 32, 48, ...,
-        self.fluidCount = 0
-        self.blockCount = 0
+        self.blocksPalette: Palette = Palette
+        
+        self.yLevel: int = yLevel # the y level, not index. example values: -64, -48, -32, -16, 0, 16, 32, 48, ...,
+        self.blockCount = 0 # non air blocks. if 0 the client doesn't render the chunk
+        self.fluidCount = 0 # number of fluids (waterlogged blocks, and water+lava of any level)
+
+    @classmethod
+    def paletteToBlocks(cls, data: list[int], palette: list[Block]) -> list[Block]:
+        indexes: list[int] = []
+        for long in data:
+            pass
+        
+        pass
+
+    def getUniqueBlocks(self) -> list[Block]:
+        out: list[Block] = []
+        for b in self.blocks:
+            if b not in out: out.append(b)
+        return out
+
+    """
+    returns ( bitsPerEntry, list of global palette entries, list of the actual entries )
+    """
+    def getPalettedContainer(self, isBiomes=False) -> tuple[int, list[int], list[int]]:
+        #Registry.getBlockStateId()
+        uniqueBlocks: list[Block] = self.getUniqueBlocks()
+        
+        print(uniqueBlocks, len(uniqueBlocks), len(self.blocks))
+        pass
 
     def XYZToIndex(self, x: int=0, y: int=0, z: int=0):
         # clamp xyz to be between 0 and 16 (inclusive, exclusive)
@@ -107,6 +166,22 @@ class Chunk:
         self.data = dataBytes
         self.nbt: nbtlib.File = None
         self.cachedPacketData: bytes = None
+        
+        self.isFull: bool = False
+        self.generateData() # basically init but for our data
+
+    def generateData(self):
+        nbt = self.getNBT()
+        if "Level" in nbt: nbt = nbt["Level"] # sometimes all of the data we want is inside of the "Level" tag.
+        self.isFull = (nbt["Status"] == "minecraft:full")
+        
+        if self.isFull == False: return # not full, ignore it
+        for sec in nbt["sections"]:
+            #print(sec)
+            sc = SubChunk(
+                sec[""]
+            )
+            pass
 
     def getNBT(self) -> nbtlib.File:
         if self.nbt != None: return self.nbt
@@ -301,8 +376,9 @@ class Chunk:
 #   after each change we can cache the packet data we would need
 
 if __name__ == "__main__":
-    r = Region("./world/overworld/r.0.0.mca")
-    c = r.getChunk(0, 0)
+    # -341, 57, -341
+    r = Region("./world/overworld/r.-1.-1.mca")
+    c = r.getChunk(11, 11)
     #print(c.getNBT().keys())
-    c.getChunkPacketDummyData()
+    #c.getChunkPacketDummyData()
 
