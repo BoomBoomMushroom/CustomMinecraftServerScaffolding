@@ -70,16 +70,26 @@ class Region:
     # TODO: have the ability to modify the chunks and maybe save the region file back again
 
 class Palette:
-    def __init__(self, bitsPerEntry: int=0):
+    # biomes are represented as string identifiers
+    def __init__(self, bitsPerEntry: int=0, entries: list[Block|str]=[]):
         self.bitsPerEntry: int = bitsPerEntry
-        self.paletteEntries: list[Block] = []
+        self.paletteEntries: list[Block|str] = entries
+    
+    def listToIndexes(self, items: list[Block|str]=[]):
+        out: list[int] = []
+        for item in items:
+            pass
+        
+        pass
+    
+    def __contains__(self, item: Block|str):
+        return item in self.paletteEntries
 
     @classmethod
     def bitsPerEntryCalculate(cls, entriesCount: int=0):
         bits = math.ceil(math.log2(entriesCount))
         return bits
 
-    # biomes are represented as string identifiers
     @classmethod
     def fromList(cls, data: list[Block|str], isBlocks: bool=True) -> Palette:
         bpe = cls.bitsPerEntryCalculate(len(data))
@@ -90,10 +100,7 @@ class Palette:
         else:
             if bpe > 3: bpe = 7 # if over the limit make it direct
         
-        out = Palette( bpe )
-        
-        
-        
+        out = Palette(bpe, data)
         return out
 
 class Block:
@@ -106,21 +113,20 @@ class Block:
 
     def __eq__(self, value):
         if type(value) == Block:
-            return self.blockStateId == value.blockStateId
+            return (self.identifier == self.identifier) and (self.blockStateId == value.blockStateId)
         else: raise NotImplementedError(f"Block.__eq__ not implemented against type: {type(value)}")
 
 class SubChunk:
     def __init__(self, blocks: list[Block]=[], biomes: list[str]=[], yLevel: int=0):
         self.blocks: list[Block] = blocks # 16x16x16
         self.biomes: list[str] = biomes # a 4x4x4 (64 entries) list of biomes in the chunk section. entries are their identifiers
-        self.blocksPalette: Palette = Palette
         
         self.yLevel: int = yLevel # the y level, not index. example values: -64, -48, -32, -16, 0, 16, 32, 48, ...,
         self.blockCount = 0 # non air blocks. if 0 the client doesn't render the chunk
         self.fluidCount = 0 # number of fluids (waterlogged blocks, and water+lava of any level)
 
     @classmethod
-    def paletteToBlocks(cls, data: list[int], palette: list[Block]) -> list[Block]:
+    def paletteToBlocks(cls, data: list[int], palette: Palette) -> list[Block]:
         indexes: list[int] = []
         for long in data:
             pass
@@ -133,15 +139,14 @@ class SubChunk:
             if b not in out: out.append(b)
         return out
 
-    """
-    returns ( bitsPerEntry, list of global palette entries, list of the actual entries )
-    """
     def getPalettedContainer(self, isBiomes=False) -> tuple[int, list[int], list[int]]:
-        #Registry.getBlockStateId()
         uniqueBlocks: list[Block] = self.getUniqueBlocks()
+        palette = Palette.fromList(uniqueBlocks, isBlocks=True)
+        outPacked: list[int] = []
         
-        print(uniqueBlocks, len(uniqueBlocks), len(self.blocks))
+        
         pass
+        
 
     def XYZToIndex(self, x: int=0, y: int=0, z: int=0):
         # clamp xyz to be between 0 and 16 (inclusive, exclusive)
